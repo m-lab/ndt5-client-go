@@ -69,6 +69,9 @@ func (p *protocolNDT5) ReceiveTestIDs() ([]uint8, error) {
 	if mtype != msgLogin {
 		return nil, errors.New("ReceiveTestIDsList: unexpected message type")
 	}
+	if len(mdata) == 0 {
+		return nil, nil // happends when test suite contains nettestStatus only
+	}
 	elems := bytes.Split(mdata, []byte(" "))
 	var testIDs []uint8
 	for _, elem := range elems {
