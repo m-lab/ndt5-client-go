@@ -342,7 +342,7 @@ func (c *Client) runDownload(ctx context.Context, proto Protocol, ch chan<- *Out
 		elapsed := float64(lastSample.Elapsed / time.Millisecond)
 		clientSpeed = 8 * float64(lastSample.Count) / elapsed
 	}
-	clientSpeedStr := fmt.Sprintf("%11.4f", clientSpeed)
+	clientSpeedStr := fmt.Sprintf("%f", clientSpeed)
 	c.emitProgress(fmt.Sprintf("client-measured speed: %s kbit/s", clientSpeedStr), ch)
 	if err := proto.SendTestMsg([]byte(clientSpeedStr)); err != nil {
 		err = fmt.Errorf("cannot seend TestMsg message: %w", err)
