@@ -117,7 +117,7 @@ type Speed struct {
 // NewClient creates a new ndt5 client instance.
 func NewClient() *Client {
 	return &Client{
-		ControlConnFactory: new(controlconnBinaryFactory),
+		ControlConnFactory: new(controlconnFactory),
 		ProtocolFactory:    new(protocolNDT5Factory),
 		MLabNSClient: mlabns.NewClient(
 			"ndt", "bassosimone-ndt5-client-go/0.0.1",

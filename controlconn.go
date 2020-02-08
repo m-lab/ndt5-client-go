@@ -9,25 +9,25 @@ import (
 	"time"
 )
 
-type controlconnBinaryFactory struct{}
+type controlconnFactory struct{}
 
-func (*controlconnBinaryFactory) DialContext(ctx context.Context, address string) (ControlConn, error) {
+func (*controlconnFactory) DialContext(ctx context.Context, address string) (ControlConn, error) {
 	conn, err := new(net.Dialer).DialContext(ctx, "tcp", address)
 	if err != nil {
 		return nil, err
 	}
-	return &controlconnBinary{conn: conn}, nil
+	return &controlconn{conn: conn}, nil
 }
 
-type controlconnBinary struct {
+type controlconn struct {
 	conn net.Conn
 }
 
-func (bcc *controlconnBinary) SetDeadline(deadline time.Time) error {
+func (bcc *controlconn) SetDeadline(deadline time.Time) error {
 	return bcc.conn.SetDeadline(deadline)
 }
 
-func (bcc *controlconnBinary) ReadMessage() (mtype uint8, data []byte, err error) {
+func (bcc *controlconn) ReadMessage() (mtype uint8, data []byte, err error) {
 	// <type: uint8> <length: uint16> <message: [0..65536]byte>
 	b := make([]byte, 1)
 	if err = bcc.Readn(b); err != nil {
@@ -44,7 +44,7 @@ func (bcc *controlconnBinary) ReadMessage() (mtype uint8, data []byte, err error
 	return
 }
 
-func (bcc *controlconnBinary) WriteMessage(mtype uint8, data []byte) error {
+func (bcc *controlconn) WriteMessage(mtype uint8, data []byte) error {
 	// <type: uint8> <length: uint16> <message: [0..65536]byte>
 	b := []byte{mtype}
 	if _, err := bcc.conn.Write(b); err != nil {
@@ -62,7 +62,7 @@ func (bcc *controlconnBinary) WriteMessage(mtype uint8, data []byte) error {
 	return err
 }
 
-func (bcc *controlconnBinary) Readn(data []byte) error {
+func (bcc *controlconn) Readn(data []byte) error {
 	// We don't care too much about performance when reading
 	// control messages, hence this simple implementation
 	for off := 0; off < len(data); {
@@ -76,6 +76,6 @@ func (bcc *controlconnBinary) Readn(data []byte) error {
 	return nil
 }
 
-func (bcc *controlconnBinary) Close() error {
+func (bcc *controlconn) Close() error {
 	return bcc.conn.Close()
 }
