@@ -36,14 +36,14 @@ func (p *protocolNDT5) ReceiveKickoff() error {
 }
 
 func (p *protocolNDT5) WaitInQueue() error {
-	mtype, mdata, err := p.cc.ReadMessage()
+	frame, err := p.cc.ReadFrame()
 	if err != nil {
 		return err
 	}
-	if mtype != msgSrvQueue {
+	if frame.Type != msgSrvQueue {
 		return errors.New("WaitInQueue: unexpected message type")
 	}
-	if !bytes.Equal(mdata, []byte("0")) {
+	if !bytes.Equal(frame.Message, []byte("0")) {
 		// Like libndt, we have chosen not to wait in queue here
 		return errors.New("WaitInQueue: server is busy")
 	}
@@ -51,28 +51,28 @@ func (p *protocolNDT5) WaitInQueue() error {
 }
 
 func (p *protocolNDT5) ReceiveVersion() (string, error) {
-	mtype, mdata, err := p.cc.ReadMessage()
+	frame, err := p.cc.ReadFrame()
 	if err != nil {
 		return "", err
 	}
-	if mtype != msgLogin {
+	if frame.Type != msgLogin {
 		return "", errors.New("ReceiveVersion: unexpected message type")
 	}
-	return string(mdata), nil
+	return string(frame.Message), nil
 }
 
 func (p *protocolNDT5) ReceiveTestIDs() ([]uint8, error) {
-	mtype, mdata, err := p.cc.ReadMessage()
+	frame, err := p.cc.ReadFrame()
 	if err != nil {
 		return nil, err
 	}
-	if mtype != msgLogin {
+	if frame.Type != msgLogin {
 		return nil, errors.New("ReceiveTestIDsList: unexpected message type")
 	}
-	if len(mdata) == 0 {
+	if len(frame.Message) == 0 {
 		return nil, nil // happends when test suite contains nettestStatus only
 	}
-	elems := bytes.Split(mdata, []byte(" "))
+	elems := bytes.Split(frame.Message, []byte(" "))
 	var testIDs []uint8
 	for _, elem := range elems {
 		val, err := strconv.ParseUint(string(elem), 10, 8)
@@ -85,59 +85,55 @@ func (p *protocolNDT5) ReceiveTestIDs() ([]uint8, error) {
 }
 
 func (p *protocolNDT5) ExpectTestPrepare() (port string, err error) {
-	var (
-		mtype uint8
-		mdata []byte
-	)
-	mtype, mdata, err = p.cc.ReadMessage()
+	frame, err := p.cc.ReadFrame()
 	if err != nil {
 		return
 	}
-	if mtype != msgTestPrepare {
-		err = fmt.Errorf("ExpectTestPrepare: invalid message type: %d", int(mtype))
+	if frame.Type != msgTestPrepare {
+		err = fmt.Errorf("ExpectTestPrepare: invalid message type: %d", int(frame.Type))
 		return
 	}
-	port = string(mdata)
+	port = string(frame.Message)
 	return
 }
 
 func (p *protocolNDT5) ExpectTestStart() error {
-	mtype, mdata, err := p.cc.ReadMessage()
+	frame, err := p.cc.ReadFrame()
 	if err != nil {
 		return err
 	}
-	if mtype != msgTestStart {
-		return fmt.Errorf("ExpectTestStart: invalid message type: %d", int(mtype))
+	if frame.Type != msgTestStart {
+		return fmt.Errorf("ExpectTestStart: invalid message type: %d", int(frame.Type))
 	}
-	if len(mdata) != 0 {
+	if len(frame.Message) != 0 {
 		return errors.New("ExpectTestStart: expected empty message")
 	}
 	return nil
 }
 
 func (p *protocolNDT5) ExpectTestMsg() (string, error) {
-	mtype, mdata, err := p.cc.ReadMessage()
+	frame, err := p.cc.ReadFrame()
 	if err != nil {
 		return "", err
 	}
-	if mtype != msgTestMsg {
-		return "", fmt.Errorf("ExpectTestMsg: invalid message type: %d", int(mtype))
+	if frame.Type != msgTestMsg {
+		return "", fmt.Errorf("ExpectTestMsg: invalid message type: %d", int(frame.Type))
 	}
-	if len(mdata) == 0 {
+	if len(frame.Message) == 0 {
 		return "", errors.New("ExpectTestMsg: expected nonempty message")
 	}
-	return string(mdata), nil
+	return string(frame.Message), nil
 }
 
 func (p *protocolNDT5) ExpectTestFinalize() error {
-	mtype, mdata, err := p.cc.ReadMessage()
+	frame, err := p.cc.ReadFrame()
 	if err != nil {
 		return err
 	}
-	if mtype != msgTestFinalize {
-		return fmt.Errorf("ExpectTestFinalize: invalid message type: %d", int(mtype))
+	if frame.Type != msgTestFinalize {
+		return fmt.Errorf("ExpectTestFinalize: invalid message type: %d", int(frame.Type))
 	}
-	if len(mdata) != 0 {
+	if len(frame.Message) != 0 {
 		return errors.New("ExpectTestFinalize: expected empty message")
 	}
 	return nil
@@ -147,32 +143,32 @@ func (p *protocolNDT5) SendTestMsg(data []byte) error {
 	return p.cc.WriteMessage(msgTestMsg, data)
 }
 
-func (p *protocolNDT5) ReceiveTestFinalizeOrTestMsg() (mtype uint8, mdata []byte, err error) {
-	mtype, mdata, err = p.cc.ReadMessage()
+func (p *protocolNDT5) ReceiveTestFinalizeOrTestMsg() (uint8, []byte, error) {
+	frame, err := p.cc.ReadFrame()
 	if err != nil {
-		return
+		return 0, nil, err
 	}
-	if mtype == msgTestFinalize {
-		return
+	if frame.Type == msgTestFinalize {
+		return msgTestFinalize, nil, nil
 	}
-	if mtype != msgTestMsg {
-		err = fmt.Errorf("ReceiveLogoutOrTestMsg: invalid message type: %d", int(mtype))
-		return
+	if frame.Type != msgTestMsg {
+		err = fmt.Errorf("ReceiveLogoutOrTestMsg: invalid message type: %d", int(frame.Type))
+		return 0, nil, err
 	}
-	return
+	return msgTestMsg, frame.Message, nil
 }
 
-func (p *protocolNDT5) ReceiveLogoutOrResults() (mtype uint8, mdata []byte, err error) {
-	mtype, mdata, err = p.cc.ReadMessage()
+func (p *protocolNDT5) ReceiveLogoutOrResults() (uint8, []byte, error) {
+	frame, err := p.cc.ReadFrame()
 	if err != nil {
-		return
+		return 0, nil, err
 	}
-	if mtype == msgLogout {
-		return
+	if frame.Type == msgLogout {
+		return msgLogout, nil, nil
 	}
-	if mtype != msgResults {
-		err = fmt.Errorf("ReceiveLogoutOrTestMsg: invalid message type: %d", int(mtype))
-		return
+	if frame.Type != msgResults {
+		err = fmt.Errorf("ReceiveLogoutOrTestMsg: invalid message type: %d", int(frame.Type))
+		return 0, nil, err
 	}
-	return
+	return msgResults, frame.Message, nil
 }

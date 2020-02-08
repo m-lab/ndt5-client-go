@@ -31,10 +31,17 @@ type MeasurementConnFactory interface {
 	DialContext(ctx context.Context, address string) (MeasurementConn, error)
 }
 
+// IncomingFrame is an incoming ndt5 frame
+type IncomingFrame struct {
+	Message []byte // message body
+	Raw     []byte // the whole raw message
+	Type    uint8  // type of message
+}
+
 // ControlConn is a control connection.
 type ControlConn interface {
 	SetDeadline(deadline time.Time) error
-	ReadMessage() (mtype uint8, data []byte, err error)
+	ReadFrame() (*IncomingFrame, error)
 	WriteMessage(mtype uint8, data []byte) error
 	Readn(data []byte) error
 	Close() error
@@ -187,7 +194,7 @@ func (c *Client) run(ctx context.Context, cc ControlConn, ch chan<- *Output) {
 		c.emitError(fmt.Errorf("cannot receive kickoff message: %w", err), ch)
 		return
 	}
-	c.emitProgress("received kickoff message", ch)
+	c.emitProgress("received the kickoff message", ch)
 	if err := proto.WaitInQueue(); err != nil {
 		c.emitError(fmt.Errorf("cannot wait in queue: %w", err), ch)
 		return

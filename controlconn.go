@@ -27,23 +27,29 @@ func (cc *controlconn) SetDeadline(deadline time.Time) error {
 	return cc.conn.SetDeadline(deadline)
 }
 
-const maxMessageSize = math.MaxUint16 + 3
+const (
+	maxBodySize  = math.MaxUint16
+	maxFrameSize = 3 + maxBodySize
+)
 
-func (cc *controlconn) ReadMessage() (mtype uint8, data []byte, err error) {
+func (cc *controlconn) ReadFrame() (*IncomingFrame, error) {
 	// <type: uint8> <length: uint16> <message: [0..65536]byte>
-	b := make([]byte, 1)
-	if err = cc.Readn(b); err != nil {
-		return
+	b := make([]byte, maxFrameSize)
+	if err := cc.Readn(b[:1]); err != nil {
+		return nil, err
 	}
-	mtype = b[0]
-	b = make([]byte, 2)
-	if err = cc.Readn(b); err != nil {
-		return
+	if err := cc.Readn(b[1:3]); err != nil {
+		return nil, err
 	}
-	length := binary.BigEndian.Uint16(b)
-	data = make([]byte, length)
-	err = cc.Readn(data)
-	return
+	size := binary.BigEndian.Uint16(b[1:3]) + 3
+	if err := cc.Readn(b[3:size]); err != nil {
+		return nil, err
+	}
+	return &IncomingFrame{
+		Message: b[3:size],
+		Raw:     b[:size],
+		Type:    b[0],
+	}, nil
 }
 
 func (cc *controlconn) WriteMessage(mtype uint8, data []byte) error {
