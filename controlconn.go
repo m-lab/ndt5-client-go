@@ -3,8 +3,6 @@ package ndt5
 import (
 	"context"
 	"encoding/binary"
-	"errors"
-	"math"
 	"net"
 	"time"
 )
@@ -27,12 +25,7 @@ func (cc *controlconn) SetDeadline(deadline time.Time) error {
 	return cc.conn.SetDeadline(deadline)
 }
 
-const (
-	maxBodySize  = math.MaxUint16
-	maxFrameSize = 3 + maxBodySize
-)
-
-func (cc *controlconn) ReadFrame() (*IncomingFrame, error) {
+func (cc *controlconn) ReadFrame() (*Frame, error) {
 	// <type: uint8> <length: uint16> <message: [0..65536]byte>
 	b := make([]byte, maxFrameSize)
 	if err := cc.Readn(b[:1]); err != nil {
@@ -45,7 +38,7 @@ func (cc *controlconn) ReadFrame() (*IncomingFrame, error) {
 	if err := cc.Readn(b[3:size]); err != nil {
 		return nil, err
 	}
-	return &IncomingFrame{
+	return &Frame{
 		Message: b[3:size],
 		Raw:     b[:size],
 		Type:    b[0],
@@ -53,20 +46,15 @@ func (cc *controlconn) ReadFrame() (*IncomingFrame, error) {
 }
 
 func (cc *controlconn) WriteMessage(mtype uint8, data []byte) error {
-	// <type: uint8> <length: uint16> <message: [0..65536]byte>
-	b := []byte{mtype}
-	if _, err := cc.conn.Write(b); err != nil {
+	frame, err := NewFrame(mtype, data)
+	if err != nil {
 		return err
 	}
-	if len(data) > math.MaxUint16 {
-		return errors.New("msgWriteLegacy: message too long")
-	}
-	b = make([]byte, 2)
-	binary.BigEndian.PutUint16(b, uint16(len(data)))
-	if _, err := cc.conn.Write(b); err != nil {
-		return err
-	}
-	_, err := cc.conn.Write(data)
+	return cc.WriteFrame(frame)
+}
+
+func (cc *controlconn) WriteFrame(frame *Frame) error {
+	_, err := cc.conn.Write(frame.Raw)
 	return err
 }
 

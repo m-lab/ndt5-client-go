@@ -4,8 +4,10 @@ package ndt5
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 	"net"
 	"time"
@@ -31,18 +33,41 @@ type MeasurementConnFactory interface {
 	DialContext(ctx context.Context, address string) (MeasurementConn, error)
 }
 
-// IncomingFrame is an incoming ndt5 frame
-type IncomingFrame struct {
+// Frame is an ndt5 frame
+type Frame struct {
 	Message []byte // message body
 	Raw     []byte // the whole raw message
 	Type    uint8  // type of message
 }
 
+const (
+	maxMessageSize = math.MaxUint16
+	maxFrameSize   = 3 + maxMessageSize
+)
+
+// NewFrame creates a new frame
+func NewFrame(mtype uint8, message []byte) (*Frame, error) {
+	// <type: uint8> <length: uint16> <message: [0..65535]byte>
+	if len(message) > maxMessageSize {
+		return nil, errors.New("message too large for frame")
+	}
+	b := make([]byte, len(message)+3)
+	b[0] = mtype
+	binary.BigEndian.PutUint16(b[1:3], uint16(len(message)))
+	copy(b[3:], message)
+	return &Frame{
+		Message: message,
+		Raw:     b,
+		Type:    mtype,
+	}, nil
+}
+
 // ControlConn is a control connection.
 type ControlConn interface {
 	SetDeadline(deadline time.Time) error
-	ReadFrame() (*IncomingFrame, error)
+	ReadFrame() (*Frame, error)
 	WriteMessage(mtype uint8, data []byte) error
+	WriteFrame(frame *Frame) error
 	Readn(data []byte) error
 	Close() error
 }
