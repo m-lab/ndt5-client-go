@@ -3,15 +3,11 @@
 package ndt5
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"math"
 	"math/rand"
 	"net"
-	"strconv"
 	"time"
 
 	"github.com/m-lab/ndt7-client-go/mlabns"
@@ -27,8 +23,50 @@ type MockableDialer interface {
 	DialContext(ctx context.Context, network, address string) (net.Conn, error)
 }
 
+// ControlConn is a control connection.
+type ControlConn interface {
+	SetDeadline(deadline time.Time) error
+	ReadMessage() (mtype uint8, data []byte, err error)
+	WriteMessage(mtype uint8, data []byte) error
+	Readn(data []byte) error
+	Close() error
+}
+
+// ControlConnFactory creates a ControlConn.
+type ControlConnFactory interface {
+	NewControlConn(conn net.Conn) ControlConn
+}
+
+// Protocol manages a ControlConn
+type Protocol interface {
+	SendLogin() error
+	ReceiveKickoff() error
+	WaitInQueue() error
+	ReceiveVersion() (version string, err error)
+	ReceiveTestIDs() (ids []uint8, err error)
+	ExpectTestPrepare() (portnum string, err error)
+	ExpectTestStart() error
+	ExpectTestMsg() (info string, err error)
+	ExpectTestFinalize() error
+	SendTestMsg(data []byte) error
+	ReceiveLogoutOrTestMsg() (mtype uint8, mdata []byte, err error)
+}
+
+// ProtocolFactory creates a Protocol.
+type ProtocolFactory interface {
+	NewProtocol(cc ControlConn) Protocol
+}
+
 // Client is an ndt5 client
 type Client struct {
+	// ControlConnFactory creates a ControlConn. It's set to its
+	// default value by NewClient; you may override it.
+	ControlConnFactory ControlConnFactory
+
+	// ProtocolFactory creates a ControlManager. It's set to its
+	// default value by NewClient; you may override it.
+	ProtocolFactory ProtocolFactory
+
 	// Dialer is the optional network Dialer. It's set to its
 	// default value by NewClient; you may override it.
 	Dialer MockableDialer
@@ -70,7 +108,9 @@ type Speed struct {
 // NewClient creates a new ndt5 client instance.
 func NewClient() *Client {
 	return &Client{
-		Dialer: new(net.Dialer),
+		ControlConnFactory: new(controlconnBinaryFactory),
+		ProtocolFactory:    new(protocolNDT5Factory),
+		Dialer:             new(net.Dialer),
 		MLabNSClient: mlabns.NewClient(
 			"ndt", "bassosimone-ndt5-client-go/0.0.1",
 		),
@@ -97,69 +137,8 @@ func (c *Client) Start(ctx context.Context) (<-chan *Output, error) {
 		return nil, err
 	}
 	ch := make(chan *Output)
-	go c.run(ctx, conn, ch)
+	go c.run(ctx, c.ControlConnFactory.NewControlConn(conn), ch)
 	return ch, nil
-}
-
-// run performs the ndt5 experiment. This function takes ownership of
-// the conn argument and will close the ch argument when done.
-func (c *Client) run(ctx context.Context, conn net.Conn, ch chan<- *Output) {
-	defer close(ch)
-	defer conn.Close()
-	if err := conn.SetDeadline(time.Now().Add(45 * time.Second)); err != nil {
-		c.emitError(fmt.Errorf("cannot set control connection deadline: %w", err), ch)
-		return
-	}
-	c.emitProgress(fmt.Sprintf("connected to remote server: %s", c.FQDN), ch)
-	if err := c.sendLogin(conn); err != nil {
-		c.emitError(fmt.Errorf("cannot send login message: %w", err), ch)
-		return
-	}
-	c.emitProgress("sent login message", ch)
-	if err := c.recvKickoff(conn); err != nil {
-		c.emitError(fmt.Errorf("cannot receive kickoff message: %w", err), ch)
-		return
-	}
-	c.emitProgress("received kickoff message", ch)
-	if err := c.waitInQueue(conn); err != nil {
-		c.emitError(fmt.Errorf("cannot wait in queue: %w", err), ch)
-		return
-	}
-	c.emitProgress("cleared to run the tests", ch)
-	version, err := c.recvVersion(conn)
-	if err != nil {
-		c.emitError(fmt.Errorf("cannot receive server's version: %w", err), ch)
-		return
-	}
-	c.emitProgress(fmt.Sprintf("got remote server version: %s", version), ch)
-	testIDs, err := c.recvTestIDs(conn)
-	if err != nil {
-		c.emitError(fmt.Errorf("cannot receive test IDs: %w", err), ch)
-		return
-	}
-	c.emitProgress("got list of test IDs", ch)
-	for _, testID := range testIDs {
-		switch testID {
-		case nettestDownload:
-			c.emitProgress("running the download test", ch)
-			if err := c.runDownload(ctx, conn, ch); err != nil {
-				c.emitWarning(fmt.Errorf("download failed: %w", err), ch)
-				// don't stop testing
-			}
-		case nettestUpload:
-			c.emitProgress("running the upload test", ch)
-			if err := c.runUpload(ctx, conn, ch); err != nil {
-				c.emitWarning(fmt.Errorf("upload failed: %w", err), ch)
-				// don't stop testing
-			}
-		}
-	}
-	c.emitProgress("receiving the results", ch)
-	if err := c.recvResultsAndLogout(conn, ch); err != nil {
-		c.emitError(fmt.Errorf("recvResultsAndLogout failed: %w", err), ch)
-		return
-	}
-	c.emitProgress("finished successfully", ch)
 }
 
 const (
@@ -178,73 +157,71 @@ const (
 	nettestStatus   uint8 = 1 << 4
 )
 
-func (c *Client) sendLogin(conn net.Conn) error {
-	body := make([]byte, 1)
-	body[0] = nettestUpload | nettestDownload | nettestStatus
-	return c.msgWriteLegacy(conn, msgLogin, body)
-}
-
-func (c *Client) recvKickoff(conn net.Conn) error {
-	desired := []byte("123456 654321")
-	received := make([]byte, len(desired))
-	if err := c.readn(conn, received); err != nil {
-		return err
+// run performs the ndt5 experiment. This function takes ownership of
+// the conn argument and will close the ch argument when done.
+func (c *Client) run(ctx context.Context, cc ControlConn, ch chan<- *Output) {
+	defer close(ch)
+	defer cc.Close()
+	if err := cc.SetDeadline(time.Now().Add(45 * time.Second)); err != nil {
+		c.emitError(fmt.Errorf("cannot set control connection deadline: %w", err), ch)
+		return
 	}
-	if !bytes.Equal(desired, received) {
-		return errors.New("recvKickoff: got invalid kickoff")
+	proto := c.ProtocolFactory.NewProtocol(cc)
+	c.emitProgress(fmt.Sprintf("connected to remote server: %s", c.FQDN), ch)
+	if err := proto.SendLogin(); err != nil {
+		c.emitError(fmt.Errorf("cannot send login message: %w", err), ch)
+		return
 	}
-	return nil
-}
-
-func (c *Client) waitInQueue(conn net.Conn) error {
-	mtype, mdata, err := c.msgReadLegacy(conn)
+	c.emitProgress("sent login message", ch)
+	if err := proto.ReceiveKickoff(); err != nil {
+		c.emitError(fmt.Errorf("cannot receive kickoff message: %w", err), ch)
+		return
+	}
+	c.emitProgress("received kickoff message", ch)
+	if err := proto.WaitInQueue(); err != nil {
+		c.emitError(fmt.Errorf("cannot wait in queue: %w", err), ch)
+		return
+	}
+	c.emitProgress("cleared to run the tests", ch)
+	version, err := proto.ReceiveVersion()
 	if err != nil {
-		return err
+		c.emitError(fmt.Errorf("cannot receive server's version: %w", err), ch)
+		return
 	}
-	if mtype != msgSrvQueue {
-		return errors.New("waitInQueue: unexpected message type")
-	}
-	if !bytes.Equal(mdata, []byte("0")) {
-		// Like libndt, we have chosen not to wait in queue here
-		return errors.New("waitInQueue: server is busy")
-	}
-	return nil
-}
-
-func (c *Client) recvVersion(conn net.Conn) (string, error) {
-	mtype, mdata, err := c.msgReadLegacy(conn)
+	c.emitProgress(fmt.Sprintf("got remote server version: %s", version), ch)
+	testIDs, err := proto.ReceiveTestIDs()
 	if err != nil {
-		return "", err
+		c.emitError(fmt.Errorf("cannot receive test IDs: %w", err), ch)
+		return
 	}
-	if mtype != msgLogin {
-		return "", errors.New("recvVersion: unexpected message type")
-	}
-	return string(mdata), nil
-}
-
-func (c *Client) recvTestIDs(conn net.Conn) ([]uint8, error) {
-	mtype, mdata, err := c.msgReadLegacy(conn)
-	if err != nil {
-		return nil, err
-	}
-	if mtype != msgLogin {
-		return nil, errors.New("recvTestIDs: unexpected message type")
-	}
-	elems := bytes.Split(mdata, []byte(" "))
-	var testIDs []uint8
-	for _, elem := range elems {
-		val, err := strconv.ParseUint(string(elem), 10, 8)
-		if err != nil {
-			return nil, err
+	c.emitProgress("got list of test IDs", ch)
+	for _, testID := range testIDs {
+		switch testID {
+		case nettestDownload:
+			c.emitProgress("running the download test", ch)
+			if err := c.runDownload(ctx, proto, ch); err != nil {
+				c.emitWarning(fmt.Errorf("download failed: %w", err), ch)
+				// don't stop testing
+			}
+		case nettestUpload:
+			c.emitProgress("running the upload test", ch)
+			if err := c.runUpload(ctx, proto, ch); err != nil {
+				c.emitWarning(fmt.Errorf("upload failed: %w", err), ch)
+				// don't stop testing
+			}
 		}
-		testIDs = append(testIDs, uint8(val))
 	}
-	return testIDs, nil
+	c.emitProgress("receiving the results", ch)
+	if err := c.recvResultsAndLogout(proto, ch); err != nil {
+		c.emitError(fmt.Errorf("recvResultsAndLogout failed: %w", err), ch)
+		return
+	}
+	c.emitProgress("finished successfully", ch)
 }
 
-func (c *Client) runUpload(ctx context.Context, conn net.Conn, ch chan<- *Output) error {
+func (c *Client) runUpload(ctx context.Context, proto Protocol, ch chan<- *Output) error {
 	testdata := c.makeBuffer()
-	portnum, err := c.expectTestPrepare(conn)
+	portnum, err := proto.ExpectTestPrepare()
 	if err != nil {
 		err = fmt.Errorf("cannot get TestPrepare message: %w", err)
 		return err
@@ -262,7 +239,7 @@ func (c *Client) runUpload(ctx context.Context, conn net.Conn, ch chan<- *Output
 		err = fmt.Errorf("cannot set measurement connection deadline: %w", err)
 		return err
 	}
-	if err := c.expectTestStart(conn); err != nil {
+	if err := proto.ExpectTestStart(); err != nil {
 		err = fmt.Errorf("cannot get TestStart message: %w", err)
 		return err
 	}
@@ -274,7 +251,7 @@ func (c *Client) runUpload(ctx context.Context, conn net.Conn, ch chan<- *Output
 		c.emit(&Output{CurUploadSpeed: speed}, ch)
 	}
 	c.emitProgress("uploader goroutine terminated", ch)
-	speed, err := c.expectTestMsg(conn)
+	speed, err := proto.ExpectTestMsg()
 	if err != nil {
 		err = fmt.Errorf("cannot get TestMsg message: %w", err)
 		return err
@@ -282,7 +259,7 @@ func (c *Client) runUpload(ctx context.Context, conn net.Conn, ch chan<- *Output
 	// TODO(bassosimone): this information should probably be
 	// parsed and emitted in a much more actionable way
 	c.emitProgress(fmt.Sprintf("server-measured speed: %s", speed), ch)
-	if err := c.expectTestFinalize(conn); err != nil {
+	if err := proto.ExpectTestFinalize(); err != nil {
 		err = fmt.Errorf("cannot get TestFinalize message: %w", err)
 		return err
 	}
@@ -309,9 +286,9 @@ func (c *Client) uploader(testconn net.Conn, testdata []byte, testch chan<- *Spe
 	}
 }
 
-func (c *Client) runDownload(ctx context.Context, conn net.Conn, ch chan<- *Output) error {
+func (c *Client) runDownload(ctx context.Context, proto Protocol, ch chan<- *Output) error {
 	testdata := make([]byte, 1<<20)
-	portnum, err := c.expectTestPrepare(conn)
+	portnum, err := proto.ExpectTestPrepare()
 	if err != nil {
 		err = fmt.Errorf("cannot get TestPrepare message: %w", err)
 		return err
@@ -329,7 +306,7 @@ func (c *Client) runDownload(ctx context.Context, conn net.Conn, ch chan<- *Outp
 		err = fmt.Errorf("cannot set measurement connection deadline: %w", err)
 		return err
 	}
-	if err := c.expectTestStart(conn); err != nil {
+	if err := proto.ExpectTestStart(); err != nil {
 		err = fmt.Errorf("cannot get TestStart message: %w", err)
 		return err
 	}
@@ -341,7 +318,7 @@ func (c *Client) runDownload(ctx context.Context, conn net.Conn, ch chan<- *Outp
 		c.emit(&Output{CurDownloadSpeed: speed}, ch)
 	}
 	c.emitProgress("downloader goroutine terminated", ch)
-	speed, err := c.expectTestMsg(conn)
+	speed, err := proto.ExpectTestMsg()
 	if err != nil {
 		return err
 	}
@@ -349,12 +326,12 @@ func (c *Client) runDownload(ctx context.Context, conn net.Conn, ch chan<- *Outp
 	// parsed and emitted in a much more actionable way
 	c.emitProgress(fmt.Sprintf("server-measured speed: %s", speed), ch)
 	// TODO(bassosimone): send real download speed
-	if err := c.msgWriteLegacy(conn, msgTestMsg, []byte("0")); err != nil {
+	if err := proto.SendTestMsg([]byte("0")); err != nil {
 		err = fmt.Errorf("cannot seend TestMsg message: %w", err)
 		return err
 	}
 	for i := 0; i < maxResultsLoops; i++ {
-		mtype, mdata, err := c.msgReadLegacy(conn)
+		mtype, mdata, err := proto.ReceiveLogoutOrTestMsg()
 		if err != nil {
 			err = fmt.Errorf("cannot get message: %w", err)
 			return err
@@ -362,9 +339,6 @@ func (c *Client) runDownload(ctx context.Context, conn net.Conn, ch chan<- *Outp
 		if mtype == msgLogout {
 			c.emitProgress("test terminated", ch)
 			return nil
-		}
-		if mtype != msgTestMsg {
-			continue // be flexible here
 		}
 		// TODO(bassosimone): save these messages
 		c.emitProgress(fmt.Sprintf("web100: %s", string(mdata)), ch)
@@ -390,9 +364,9 @@ func (c *Client) downloader(testconn net.Conn, testdata []byte, testch chan<- *S
 	}
 }
 
-func (c *Client) recvResultsAndLogout(conn net.Conn, ch chan<- *Output) error {
+func (c *Client) recvResultsAndLogout(proto Protocol, ch chan<- *Output) error {
 	for i := 0; i < maxResultsLoops; i++ {
-		mtype, mdata, err := c.msgReadLegacy(conn)
+		mtype, mdata, err := proto.ReceiveLogoutOrTestMsg()
 		if err != nil {
 			err = fmt.Errorf("cannot get message: %w", err)
 			return err
@@ -404,114 +378,6 @@ func (c *Client) recvResultsAndLogout(conn net.Conn, ch chan<- *Output) error {
 		c.emitProgress(fmt.Sprintf("server: %s", string(mdata)), ch)
 	}
 	return errors.New("recvResultsAndLogout: too many results")
-}
-
-func (c *Client) expectTestPrepare(conn net.Conn) (port string, err error) {
-	var (
-		mtype uint8
-		mdata []byte
-	)
-	mtype, mdata, err = c.msgReadLegacy(conn)
-	if err != nil {
-		return
-	}
-	if mtype != msgTestPrepare {
-		err = fmt.Errorf("expectTestPrepare: invalid message type: %d", int(mtype))
-		return
-	}
-	port = string(mdata)
-	return
-}
-
-func (c *Client) expectTestStart(conn net.Conn) error {
-	mtype, mdata, err := c.msgReadLegacy(conn)
-	if err != nil {
-		return err
-	}
-	if mtype != msgTestStart {
-		return fmt.Errorf("expectTestStart: invalid message type: %d", int(mtype))
-	}
-	if len(mdata) != 0 {
-		return errors.New("expectTestStart: expected empty message")
-	}
-	return nil
-}
-
-func (c *Client) expectTestMsg(conn net.Conn) (string, error) {
-	mtype, mdata, err := c.msgReadLegacy(conn)
-	if err != nil {
-		return "", err
-	}
-	if mtype != msgTestMsg {
-		return "", fmt.Errorf("expectTestMsg: invalid message type: %d", int(mtype))
-	}
-	if len(mdata) == 0 {
-		return "", errors.New("expectTestMsg: expected nonempty message")
-	}
-	return string(mdata), nil
-}
-
-func (c *Client) expectTestFinalize(conn net.Conn) error {
-	mtype, mdata, err := c.msgReadLegacy(conn)
-	if err != nil {
-		return err
-	}
-	if mtype != msgTestFinalize {
-		return fmt.Errorf("expectTestFinalize: invalid message type: %d", int(mtype))
-	}
-	if len(mdata) != 0 {
-		return errors.New("expectTestFinalize: expected empty message")
-	}
-	return nil
-}
-
-func (c *Client) msgWriteLegacy(conn net.Conn, mtype uint8, data []byte) error {
-	// <type: uint8> <length: uint16> <message: [0..65536]byte>
-	b := []byte{mtype}
-	if _, err := conn.Write(b); err != nil {
-		return err
-	}
-	if len(data) > math.MaxUint16 {
-		return errors.New("msgWriteLegacy: message too long")
-	}
-	b = make([]byte, 2)
-	binary.BigEndian.PutUint16(b, uint16(len(data)))
-	if _, err := conn.Write(b); err != nil {
-		return err
-	}
-	_, err := conn.Write(data)
-	return err
-}
-
-func (c *Client) msgReadLegacy(conn net.Conn) (mtype uint8, data []byte, err error) {
-	// <type: uint8> <length: uint16> <message: [0..65536]byte>
-	b := make([]byte, 1)
-	if err = c.readn(conn, b); err != nil {
-		return
-	}
-	mtype = b[0]
-	b = make([]byte, 2)
-	if err = c.readn(conn, b); err != nil {
-		return
-	}
-	length := binary.BigEndian.Uint16(b)
-	data = make([]byte, length)
-	err = c.readn(conn, data)
-	return
-}
-
-func (c *Client) readn(conn net.Conn, data []byte) error {
-	// We don't care too much about performance when reading
-	// control messages, hence this simple implementation
-	for off := 0; off < len(data); {
-		curr := make([]byte, 1)
-		if _, err := conn.Read(curr); err != nil {
-			return err
-		}
-		data[off] = curr[0]
-		off++
-	}
-	return nil
 }
 
 func (c *Client) makeBuffer() []byte {
