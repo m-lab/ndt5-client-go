@@ -1,6 +1,7 @@
 package ndt5
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"math"
@@ -10,8 +11,12 @@ import (
 
 type controlconnBinaryFactory struct{}
 
-func (bccf *controlconnBinaryFactory) NewControlConn(conn net.Conn) ControlConn {
-	return &controlconnBinary{conn: conn}
+func (*controlconnBinaryFactory) DialContext(ctx context.Context, address string) (ControlConn, error) {
+	conn, err := new(net.Dialer).DialContext(ctx, "tcp", address)
+	if err != nil {
+		return nil, err
+	}
+	return &controlconnBinary{conn: conn}, nil
 }
 
 type controlconnBinary struct {

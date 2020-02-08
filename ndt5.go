@@ -18,9 +18,17 @@ type MockableMlabNSClient interface {
 	Query(ctx context.Context) (fqdn string, err error)
 }
 
-// MockableDialer is a mockable connection dialer
-type MockableDialer interface {
-	DialContext(ctx context.Context, network, address string) (net.Conn, error)
+// MeasurementConn is a measurement connection.
+type MeasurementConn interface {
+	SetDeadline(deadline time.Time) error
+	Read(b []byte) (int, error)
+	Write(b []byte) (int, error)
+	Close() error
+}
+
+// MeasurementConnFactory is a measurement connection factory.
+type MeasurementConnFactory interface {
+	DialContext(ctx context.Context, address string) (MeasurementConn, error)
 }
 
 // ControlConn is a control connection.
@@ -34,7 +42,7 @@ type ControlConn interface {
 
 // ControlConnFactory creates a ControlConn.
 type ControlConnFactory interface {
-	NewControlConn(conn net.Conn) ControlConn
+	DialContext(ctx context.Context, address string) (ControlConn, error)
 }
 
 // Protocol manages a ControlConn
@@ -67,10 +75,6 @@ type Client struct {
 	// default value by NewClient; you may override it.
 	ProtocolFactory ProtocolFactory
 
-	// Dialer is the optional network Dialer. It's set to its
-	// default value by NewClient; you may override it.
-	Dialer MockableDialer
-
 	// FQDN is the optional server FQDN. We will discover the FQDN of
 	// a nearby M-Lab server for you if this field is empty.
 	FQDN string
@@ -78,6 +82,10 @@ type Client struct {
 	// MLabNSClient is the mlabns client. We'll configure it with
 	// defaults in NewClient and you may override it.
 	MLabNSClient MockableMlabNSClient
+
+	// MeasurementConnFactory creates a MeasurementConn. It's set to its
+	// default value by NewClient; you may override it.
+	MeasurementConnFactory MeasurementConnFactory
 }
 
 // Output is the output emitted by ndt5
@@ -110,10 +118,10 @@ func NewClient() *Client {
 	return &Client{
 		ControlConnFactory: new(controlconnBinaryFactory),
 		ProtocolFactory:    new(protocolNDT5Factory),
-		Dialer:             new(net.Dialer),
 		MLabNSClient: mlabns.NewClient(
 			"ndt", "bassosimone-ndt5-client-go/0.0.1",
 		),
+		MeasurementConnFactory: new(measurementconnBinaryFactory),
 	}
 }
 
@@ -131,13 +139,13 @@ func (c *Client) Start(ctx context.Context) (<-chan *Output, error) {
 		}
 		c.FQDN = fqdn
 	}
-	conn, err := c.Dialer.DialContext(
-		ctx, "tcp", net.JoinHostPort(c.FQDN, "3001"))
+	cc, err := c.ControlConnFactory.DialContext(
+		ctx, net.JoinHostPort(c.FQDN, "3001"))
 	if err != nil {
 		return nil, err
 	}
 	ch := make(chan *Output)
-	go c.run(ctx, c.ControlConnFactory.NewControlConn(conn), ch)
+	go c.run(ctx, cc, ch)
 	return ch, nil
 }
 
@@ -227,8 +235,8 @@ func (c *Client) runUpload(ctx context.Context, proto Protocol, ch chan<- *Outpu
 		return err
 	}
 	c.emitProgress("got TestPrepare message", ch)
-	testconn, err := c.Dialer.DialContext(
-		ctx, "tcp", net.JoinHostPort(c.FQDN, portnum),
+	testconn, err := c.MeasurementConnFactory.DialContext(
+		ctx, net.JoinHostPort(c.FQDN, portnum),
 	)
 	if err != nil {
 		err = fmt.Errorf("cannot create measurement connection: %w", err)
@@ -269,7 +277,7 @@ func (c *Client) runUpload(ctx context.Context, proto Protocol, ch chan<- *Outpu
 
 // uploader runs the async uploader. It takes ownership of the testconn
 // and closes the testch when it is done.
-func (c *Client) uploader(testconn net.Conn, testdata []byte, testch chan<- *Speed) {
+func (c *Client) uploader(testconn MeasurementConn, testdata []byte, testch chan<- *Speed) {
 	defer testconn.Close()
 	defer close(testch)
 	var (
@@ -294,8 +302,8 @@ func (c *Client) runDownload(ctx context.Context, proto Protocol, ch chan<- *Out
 		return err
 	}
 	c.emitProgress("got test prepare message", ch)
-	testconn, err := c.Dialer.DialContext(
-		ctx, "tcp", net.JoinHostPort(c.FQDN, portnum),
+	testconn, err := c.MeasurementConnFactory.DialContext(
+		ctx, net.JoinHostPort(c.FQDN, portnum),
 	)
 	if err != nil {
 		err = fmt.Errorf("cannot create measurement connection: %w", err)
@@ -347,7 +355,7 @@ func (c *Client) runDownload(ctx context.Context, proto Protocol, ch chan<- *Out
 }
 
 // downloader is like uploader but for the download.
-func (c *Client) downloader(testconn net.Conn, testdata []byte, testch chan<- *Speed) {
+func (c *Client) downloader(testconn MeasurementConn, testdata []byte, testch chan<- *Speed) {
 	defer testconn.Close()
 	defer close(testch)
 	var (
