@@ -46,6 +46,7 @@ func main() {
 }
 
 func computeSpeed(speed *ndt5.Speed) string {
-	formatted := float64(8*speed.Count) / float64(speed.Elapsed.Microseconds())
+	elapsed := speed.Elapsed.Seconds() * 1e06
+	formatted := float64(8*speed.Count) / elapsed
 	return fmt.Sprintf("%11.4f Mbit/s", formatted)
 }

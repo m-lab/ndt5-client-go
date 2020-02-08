@@ -324,8 +324,10 @@ func (c *Client) runDownload(ctx context.Context, proto Protocol, ch chan<- *Out
 	testch := make(chan *Speed)
 	go c.downloader(testconn, testdata, testch)
 	c.emitProgress("downloader goroutine forked off", ch)
+	var lastSample *Speed
 	for speed := range testch {
 		c.emit(&Output{CurDownloadSpeed: speed}, ch)
+		lastSample = speed
 	}
 	c.emitProgress("downloader goroutine terminated", ch)
 	speed, err := proto.ExpectTestMsg()
@@ -334,9 +336,15 @@ func (c *Client) runDownload(ctx context.Context, proto Protocol, ch chan<- *Out
 	}
 	// TODO(bassosimone): this information should probably be
 	// parsed and emitted in a much more actionable way
-	c.emitProgress(fmt.Sprintf("server-measured speed: %s", speed), ch)
-	// TODO(bassosimone): send real download speed
-	if err := proto.SendTestMsg([]byte("0")); err != nil {
+	c.emitProgress(fmt.Sprintf("server-measured speed: %s kbit/s", speed), ch)
+	var clientSpeed float64
+	if lastSample != nil {
+		elapsed := float64(lastSample.Elapsed / time.Millisecond)
+		clientSpeed = 8 * float64(lastSample.Count) / elapsed
+	}
+	clientSpeedStr := fmt.Sprintf("%11.4f", clientSpeed)
+	c.emitProgress(fmt.Sprintf("client-measured speed: %s kbit/s", clientSpeedStr), ch)
+	if err := proto.SendTestMsg([]byte(clientSpeedStr)); err != nil {
 		err = fmt.Errorf("cannot seend TestMsg message: %w", err)
 		return err
 	}
