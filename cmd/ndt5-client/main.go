@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"strings"
 
@@ -9,8 +10,14 @@ import (
 	"github.com/m-lab/go/rtx"
 )
 
+var (
+	flagHostname = flag.String("hostname", "", "Measurement server hostname")
+)
+
 func main() {
+	flag.Parse()
 	client := ndt5.NewClient()
+	client.FQDN = *flagHostname
 	out, err := client.Start(context.Background())
 	rtx.Must(err, "client.Start failed")
 	var extra string

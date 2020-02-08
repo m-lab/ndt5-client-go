@@ -57,7 +57,8 @@ type Protocol interface {
 	ExpectTestMsg() (info string, err error)
 	ExpectTestFinalize() error
 	SendTestMsg(data []byte) error
-	ReceiveLogoutOrTestMsg() (mtype uint8, mdata []byte, err error)
+	ReceiveTestFinalizeOrTestMsg() (mtype uint8, mdata []byte, err error)
+	ReceiveLogoutOrResults() (mtype uint8, mdata []byte, err error)
 }
 
 // ProtocolFactory creates a Protocol.
@@ -158,6 +159,7 @@ const (
 	msgTestStart    uint8 = 4
 	msgTestMsg      uint8 = 5
 	msgTestFinalize uint8 = 6
+	msgResults      uint8 = 8
 	msgLogout       uint8 = 9
 
 	nettestUpload   uint8 = 1 << 1
@@ -202,7 +204,7 @@ func (c *Client) run(ctx context.Context, cc ControlConn, ch chan<- *Output) {
 		c.emitError(fmt.Errorf("cannot receive test IDs: %w", err), ch)
 		return
 	}
-	c.emitProgress("got list of test IDs", ch)
+	c.emitProgress(fmt.Sprintf("got list of test IDs: %+v", testIDs), ch)
 	for _, testID := range testIDs {
 		switch testID {
 		case nettestDownload:
@@ -339,12 +341,12 @@ func (c *Client) runDownload(ctx context.Context, proto Protocol, ch chan<- *Out
 		return err
 	}
 	for i := 0; i < maxResultsLoops; i++ {
-		mtype, mdata, err := proto.ReceiveLogoutOrTestMsg()
+		mtype, mdata, err := proto.ReceiveTestFinalizeOrTestMsg()
 		if err != nil {
 			err = fmt.Errorf("cannot get message: %w", err)
 			return err
 		}
-		if mtype == msgLogout {
+		if mtype == msgTestFinalize {
 			c.emitProgress("test terminated", ch)
 			return nil
 		}
@@ -374,7 +376,7 @@ func (c *Client) downloader(testconn MeasurementConn, testdata []byte, testch ch
 
 func (c *Client) recvResultsAndLogout(proto Protocol, ch chan<- *Output) error {
 	for i := 0; i < maxResultsLoops; i++ {
-		mtype, mdata, err := proto.ReceiveLogoutOrTestMsg()
+		mtype, mdata, err := proto.ReceiveLogoutOrResults()
 		if err != nil {
 			err = fmt.Errorf("cannot get message: %w", err)
 			return err

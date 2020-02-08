@@ -144,7 +144,22 @@ func (p *protocolNDT5) SendTestMsg(data []byte) error {
 	return p.cc.WriteMessage(msgTestMsg, data)
 }
 
-func (p *protocolNDT5) ReceiveLogoutOrTestMsg() (mtype uint8, mdata []byte, err error) {
+func (p *protocolNDT5) ReceiveTestFinalizeOrTestMsg() (mtype uint8, mdata []byte, err error) {
+	mtype, mdata, err = p.cc.ReadMessage()
+	if err != nil {
+		return
+	}
+	if mtype == msgTestFinalize {
+		return
+	}
+	if mtype != msgTestMsg {
+		err = fmt.Errorf("ReceiveLogoutOrTestMsg: invalid message type: %d", int(mtype))
+		return
+	}
+	return
+}
+
+func (p *protocolNDT5) ReceiveLogoutOrResults() (mtype uint8, mdata []byte, err error) {
 	mtype, mdata, err = p.cc.ReadMessage()
 	if err != nil {
 		return
@@ -152,7 +167,7 @@ func (p *protocolNDT5) ReceiveLogoutOrTestMsg() (mtype uint8, mdata []byte, err 
 	if mtype == msgLogout {
 		return
 	}
-	if mtype != msgTestMsg {
+	if mtype != msgResults {
 		err = fmt.Errorf("ReceiveLogoutOrTestMsg: invalid message type: %d", int(mtype))
 		return
 	}
