@@ -19,6 +19,14 @@ func main() {
 			fmt.Printf("%s%s\n", extra, strings.Trim(ev.InfoMessage.Message, "\t\n "))
 			extra = ""
 		}
+		if ev.WarningMessage != nil {
+			fmt.Printf("%swarning: %s\n", extra, ev.WarningMessage.Error.Error())
+			extra = ""
+		}
+		if ev.ErrorMessage != nil {
+			fmt.Printf("%serror: %s\n", extra, ev.ErrorMessage.Error.Error())
+			extra = ""
+		}
 		if ev.CurDownloadSpeed != nil {
 			fmt.Printf("\rdownload: %s", computeSpeed(ev.CurDownloadSpeed))
 			extra = "\n"
