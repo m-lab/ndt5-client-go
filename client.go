@@ -112,7 +112,7 @@ type ControlConn interface {
 
 	// WriteLogin writes the login message using the proper convention
 	// required by the current transport.
-	WriteLogin(versionCompat string, testSuite []byte) error
+	WriteLogin(versionCompat string, testSuite byte) error
 
 	// ReadKickoffMessage reads the kickoff message into b. Depending
 	// on the transport we may not read an actual message from the network

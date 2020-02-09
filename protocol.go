@@ -19,9 +19,8 @@ type protocolNDT5 struct {
 
 func (p *protocolNDT5) SendLogin() error {
 	const ndt5VersionCompat = "v3.7.0"
-	body := make([]byte, 1)
-	body[0] = nettestUpload | nettestDownload | nettestStatus
-	return p.cc.WriteLogin(ndt5VersionCompat, body)
+	flags := nettestUpload | nettestDownload | nettestStatus
+	return p.cc.WriteLogin(ndt5VersionCompat, flags)
 }
 
 var kickoffMessage = []byte("123456 654321")

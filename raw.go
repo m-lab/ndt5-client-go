@@ -58,9 +58,9 @@ func (cc *rawControlConn) SetDeadline(deadline time.Time) error {
 	return cc.conn.SetDeadline(deadline)
 }
 
-func (cc *rawControlConn) WriteLogin(versionCompat string, testSuite []byte) error {
+func (cc *rawControlConn) WriteLogin(versionCompat string, testSuite byte) error {
 	// Note that versionCompat is ignored with the legacy login message
-	return cc.WriteMessage(msgLogin, testSuite)
+	return cc.WriteMessage(msgLogin, []byte{testSuite})
 }
 
 func (cc *rawControlConn) ReadKickoffMessage(b []byte) error {
