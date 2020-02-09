@@ -1,5 +1,4 @@
-// Package ndt5 contains an ndt5 client. We implement the most basic
-// ndt5 protocol, i.e. binary data over cleartext 3001/tcp.
+// Package ndt5 contains an ndt5 client.
 package ndt5
 
 import (
