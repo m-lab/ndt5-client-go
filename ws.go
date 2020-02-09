@@ -50,7 +50,10 @@ func (cf *WSConnectionsFactory) DialControlConn(ctx context.Context, address str
 	if err != nil {
 		return nil, err
 	}
-	return &wsControlConn{conn: conn}, nil
+	return &wsControlConn{
+		conn:     conn,
+		observer: new(defaultFrameReadWriteObserver),
+	}, nil
 }
 
 // DialMeasurementConn implements ConnectionsFactory.DialMeasurementConn.

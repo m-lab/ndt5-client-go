@@ -33,7 +33,10 @@ func (cf *RawConnectionsFactory) dialControlConn(ctx context.Context, address st
 	if err != nil {
 		return nil, err
 	}
-	return &rawControlConn{conn: conn}, nil
+	return &rawControlConn{
+		conn:     conn,
+		observer: new(defaultFrameReadWriteObserver),
+	}, nil
 }
 
 // DialMeasurementConn implements ConnectionsFactory.DialMeasurementConn.

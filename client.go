@@ -232,6 +232,9 @@ type Speed struct {
 }
 
 // NewClient creates a new ndt5 client instance.
+//
+// TODO(bassosimone): here we MUST receive the user agent
+// like we already do in ndt7.
 func NewClient() *Client {
 	return &Client{
 		ConnectionsFactory: NewRawConnectionsFactory(),
@@ -411,6 +414,7 @@ func (c *Client) uploader(testconn MeasurementConn, testch chan<- *Speed) {
 			return
 		}
 		count += int64(num)
+		// TODO(bassosimone): this should be nonblocking
 		testch <- &Speed{Count: count, Elapsed: time.Since(begin)}
 	}
 }
@@ -498,6 +502,7 @@ func (c *Client) downloader(testconn MeasurementConn, testch chan<- *Speed) {
 			return
 		}
 		count += num
+		// TODO(bassosimone): this should be nonblocking
 		testch <- &Speed{Count: count, Elapsed: time.Since(begin)}
 	}
 }
