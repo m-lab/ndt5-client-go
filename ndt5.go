@@ -28,11 +28,6 @@ type MeasurementConn interface {
 	Close() error
 }
 
-// MeasurementConnFactory is a measurement connection factory.
-type MeasurementConnFactory interface {
-	DialContext(ctx context.Context, address string) (MeasurementConn, error)
-}
-
 // Frame is an ndt5 frame
 type Frame struct {
 	Message []byte // message body
@@ -72,9 +67,10 @@ type ControlConn interface {
 	Close() error
 }
 
-// ControlConnFactory creates a ControlConn.
-type ControlConnFactory interface {
-	DialContext(ctx context.Context, address string) (ControlConn, error)
+// ConnectionsFactory creates connections.
+type ConnectionsFactory interface {
+	DialControlConn(ctx context.Context, address string) (ControlConn, error)
+	DialMeasurementConn(ctx context.Context, address string) (MeasurementConn, error)
 }
 
 // Protocol manages a ControlConn
@@ -100,9 +96,9 @@ type ProtocolFactory interface {
 
 // Client is an ndt5 client
 type Client struct {
-	// ControlConnFactory creates a ControlConn. It's set to its
+	// ConnectionsFactory creates connections. It's set to its
 	// default value by NewClient; you may override it.
-	ControlConnFactory ControlConnFactory
+	ConnectionsFactory ConnectionsFactory
 
 	// ProtocolFactory creates a ControlManager. It's set to its
 	// default value by NewClient; you may override it.
@@ -115,10 +111,6 @@ type Client struct {
 	// MLabNSClient is the mlabns client. We'll configure it with
 	// defaults in NewClient and you may override it.
 	MLabNSClient MockableMlabNSClient
-
-	// MeasurementConnFactory creates a MeasurementConn. It's set to its
-	// default value by NewClient; you may override it.
-	MeasurementConnFactory MeasurementConnFactory
 }
 
 // Output is the output emitted by ndt5
@@ -149,12 +141,11 @@ type Speed struct {
 // NewClient creates a new ndt5 client instance.
 func NewClient() *Client {
 	return &Client{
-		ControlConnFactory: new(controlconnFactory),
+		ConnectionsFactory: newRawConnectionsFactory(),
 		ProtocolFactory:    new(protocolNDT5Factory),
 		MLabNSClient: mlabns.NewClient(
 			"ndt", "bassosimone-ndt5-client-go/0.0.1",
 		),
-		MeasurementConnFactory: new(measurementconnFactory),
 	}
 }
 
@@ -172,7 +163,7 @@ func (c *Client) Start(ctx context.Context) (<-chan *Output, error) {
 		}
 		c.FQDN = fqdn
 	}
-	cc, err := c.ControlConnFactory.DialContext(
+	cc, err := c.ConnectionsFactory.DialControlConn(
 		ctx, net.JoinHostPort(c.FQDN, "3001"))
 	if err != nil {
 		return nil, err
@@ -269,7 +260,7 @@ func (c *Client) runUpload(ctx context.Context, proto Protocol, ch chan<- *Outpu
 		return err
 	}
 	c.emitProgress("got TestPrepare message", ch)
-	testconn, err := c.MeasurementConnFactory.DialContext(
+	testconn, err := c.ConnectionsFactory.DialMeasurementConn(
 		ctx, net.JoinHostPort(c.FQDN, portnum),
 	)
 	if err != nil {
@@ -336,7 +327,7 @@ func (c *Client) runDownload(ctx context.Context, proto Protocol, ch chan<- *Out
 		return err
 	}
 	c.emitProgress("got test prepare message", ch)
-	testconn, err := c.MeasurementConnFactory.DialContext(
+	testconn, err := c.ConnectionsFactory.DialMeasurementConn(
 		ctx, net.JoinHostPort(c.FQDN, portnum),
 	)
 	if err != nil {

@@ -7,25 +7,41 @@ import (
 	"time"
 )
 
-type controlconnFactory struct{}
+type rawConnectionsFactory struct {
+	dialer *net.Dialer
+}
 
-func (*controlconnFactory) DialContext(ctx context.Context, address string) (ControlConn, error) {
-	conn, err := new(net.Dialer).DialContext(ctx, "tcp", address)
+func newRawConnectionsFactory() *rawConnectionsFactory {
+	return &rawConnectionsFactory{
+		dialer: new(net.Dialer),
+	}
+}
+
+func (rcf *rawConnectionsFactory) DialControlConn(ctx context.Context, address string) (ControlConn, error) {
+	conn, err := rcf.dialer.DialContext(ctx, "tcp", address)
 	if err != nil {
 		return nil, err
 	}
-	return &controlconn{conn: conn}, nil
+	return &rawControlConn{conn: conn}, nil
 }
 
-type controlconn struct {
+func (rcf *rawConnectionsFactory) DialMeasurementConn(ctx context.Context, address string) (MeasurementConn, error) {
+	conn, err := rcf.dialer.DialContext(ctx, "tcp", address)
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
+type rawControlConn struct {
 	conn net.Conn
 }
 
-func (cc *controlconn) SetDeadline(deadline time.Time) error {
+func (cc *rawControlConn) SetDeadline(deadline time.Time) error {
 	return cc.conn.SetDeadline(deadline)
 }
 
-func (cc *controlconn) ReadFrame() (*Frame, error) {
+func (cc *rawControlConn) ReadFrame() (*Frame, error) {
 	// <type: uint8> <length: uint16> <message: [0..65536]byte>
 	b := make([]byte, maxFrameSize)
 	if err := cc.Readn(b[:1]); err != nil {
@@ -45,7 +61,7 @@ func (cc *controlconn) ReadFrame() (*Frame, error) {
 	}, nil
 }
 
-func (cc *controlconn) WriteMessage(mtype uint8, data []byte) error {
+func (cc *rawControlConn) WriteMessage(mtype uint8, data []byte) error {
 	frame, err := NewFrame(mtype, data)
 	if err != nil {
 		return err
@@ -53,12 +69,12 @@ func (cc *controlconn) WriteMessage(mtype uint8, data []byte) error {
 	return cc.WriteFrame(frame)
 }
 
-func (cc *controlconn) WriteFrame(frame *Frame) error {
+func (cc *rawControlConn) WriteFrame(frame *Frame) error {
 	_, err := cc.conn.Write(frame.Raw)
 	return err
 }
 
-func (cc *controlconn) Readn(data []byte) error {
+func (cc *rawControlConn) Readn(data []byte) error {
 	// We don't care too much about performance when reading
 	// control messages, hence this simple implementation
 	for off := 0; off < len(data); {
@@ -72,6 +88,6 @@ func (cc *controlconn) Readn(data []byte) error {
 	return nil
 }
 
-func (cc *controlconn) Close() error {
+func (cc *rawControlConn) Close() error {
 	return cc.conn.Close()
 }
