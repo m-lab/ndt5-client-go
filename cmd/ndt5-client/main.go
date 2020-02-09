@@ -8,17 +8,35 @@ import (
 	"strings"
 
 	"github.com/bassosimone/ndt5-client-go"
+	"github.com/m-lab/go/flagx"
 	"github.com/m-lab/go/rtx"
 )
 
 var (
-	flagHostname = flag.String("hostname", "", "Measurement server hostname")
+	flagHostname  = flag.String("hostname", "", "Measurement server hostname")
+	flagTransport = flagx.Enum{
+		Options: []string{"raw", "wss"},
+		Value:   "raw",
+	}
 	flagVerbose  = flag.Bool("verbose", false, "Log ndt5 messages")
 )
+
+func init() {
+	flag.Var(
+		&flagTransport,
+		"transport",
+		`Transport to use: "raw" (the default), or "wss"`,
+	)
+}
 
 func main() {
 	flag.Parse()
 	client := ndt5.NewClient()
+	switch txp := flagTransport.Value; txp {
+	case "wss":
+		client.ConnectionsFactory = ndt5.NewWSConnectionsFactory(txp)
+	default:
+	}
 	client.FQDN = *flagHostname
 	if *flagVerbose {
 		client.ObserverFactory = new(verboseFrameReadWriteObserverFactory)
