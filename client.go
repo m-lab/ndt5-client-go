@@ -76,8 +76,37 @@ func NewFrame(mtype uint8, message []byte) (*Frame, error) {
 	}, nil
 }
 
+// FrameReadWriteObserver observes when ndt5 frames are
+// read or written on the control conn. You MUST NOT change
+// the frames that you see, but you can log them.
+type FrameReadWriteObserver interface {
+	OnRead(frame *Frame)
+	OnWrite(frame *Frame)
+}
+
+type defaultFrameReadWriteObserver struct{}
+
+func (*defaultFrameReadWriteObserver) OnRead(frame *Frame)  {}
+func (*defaultFrameReadWriteObserver) OnWrite(frame *Frame) {}
+
+// FrameReadWriteObserverFactory creates a new
+// instance of FrameReadWriteObserver.
+type FrameReadWriteObserverFactory interface {
+	New(out chan<- *Output) FrameReadWriteObserver
+}
+
+type defaultFrameReadWriteObserverFactory struct{}
+
+func (*defaultFrameReadWriteObserverFactory) New(out chan<- *Output) FrameReadWriteObserver {
+	return new(defaultFrameReadWriteObserver)
+}
+
 // ControlConn is a control connection.
 type ControlConn interface {
+	// SetFrameReadWriteObserver sets the observer for the
+	// events where a ndt5 frame is read or written
+	SetFrameReadWriteObserver(observer FrameReadWriteObserver)
+
 	// SetDeadline sets the read and write dealines for the conn.
 	SetDeadline(deadline time.Time) error
 
@@ -155,6 +184,10 @@ type Client struct {
 	// initially introduced with the NDT codebase.
 	ConnectionsFactory ConnectionsFactory
 
+	// ObserverFactory allows you to observe frame events. It's set to its
+	// default value by NewClient; you may override it.
+	ObserverFactory FrameReadWriteObserverFactory
+
 	// ProtocolFactory creates a ControlManager. It's set to its
 	// default value by NewClient; you may override it.
 	//
@@ -176,6 +209,7 @@ type Client struct {
 type Output struct {
 	CurDownloadSpeed *Speed      `json:",omitempty"`
 	CurUploadSpeed   *Speed      `json:",omitempty"`
+	DebugMessage     *LogMessage `json:",omitempty"`
 	ErrorMessage     *Failure    `json:",omitempty"`
 	InfoMessage      *LogMessage `json:",omitempty"`
 	WarningMessage   *Failure    `json:",omitempty"`
@@ -201,6 +235,7 @@ type Speed struct {
 func NewClient() *Client {
 	return &Client{
 		ConnectionsFactory: NewRawConnectionsFactory(),
+		ObserverFactory:    new(defaultFrameReadWriteObserverFactory),
 		ProtocolFactory:    new(protocolNDT5Factory),
 		MLabNSClient: mlabns.NewClient(
 			"ndt_ssl", "bassosimone-ndt5-client-go/0.0.1",
@@ -227,6 +262,7 @@ func (c *Client) Start(ctx context.Context) (<-chan *Output, error) {
 		return nil, err
 	}
 	ch := make(chan *Output)
+	cc.SetFrameReadWriteObserver(c.ObserverFactory.New(ch))
 	go c.run(ctx, cc, ch)
 	return ch, nil
 }

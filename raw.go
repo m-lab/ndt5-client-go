@@ -46,7 +46,12 @@ func (cf *RawConnectionsFactory) DialMeasurementConn(ctx context.Context, addres
 }
 
 type rawControlConn struct {
-	conn net.Conn
+	conn     net.Conn
+	observer FrameReadWriteObserver
+}
+
+func (cc *rawControlConn) SetFrameReadWriteObserver(observer FrameReadWriteObserver) {
+	cc.observer = observer
 }
 
 func (cc *rawControlConn) SetDeadline(deadline time.Time) error {
@@ -75,11 +80,13 @@ func (cc *rawControlConn) ReadFrame() (*Frame, error) {
 	if err := cc.readn(b[3:size]); err != nil {
 		return nil, err
 	}
-	return &Frame{
+	frame := &Frame{
 		Message: b[3:size],
 		Raw:     b[:size],
 		Type:    b[0],
-	}, nil
+	}
+	cc.observer.OnRead(frame)
+	return frame, nil
 }
 
 func (cc *rawControlConn) WriteMessage(mtype uint8, data []byte) error {
@@ -91,6 +98,7 @@ func (cc *rawControlConn) WriteMessage(mtype uint8, data []byte) error {
 }
 
 func (cc *rawControlConn) WriteFrame(frame *Frame) error {
+	cc.observer.OnWrite(frame)
 	_, err := cc.conn.Write(frame.Raw)
 	return err
 }
