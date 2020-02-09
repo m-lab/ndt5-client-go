@@ -154,7 +154,7 @@ func NewClient() *Client {
 		MLabNSClient: mlabns.NewClient(
 			"ndt", "bassosimone-ndt5-client-go/0.0.1",
 		),
-		MeasurementConnFactory: new(measurementconnBinaryFactory),
+		MeasurementConnFactory: new(measurementconnFactory),
 	}
 }
 
