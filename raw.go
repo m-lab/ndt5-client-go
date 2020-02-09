@@ -18,6 +18,14 @@ func newRawConnectionsFactory() *rawConnectionsFactory {
 }
 
 func (rcf *rawConnectionsFactory) DialControlConn(ctx context.Context, address string) (ControlConn, error) {
+	_, _, err := net.SplitHostPort(address)
+	if err != nil {
+		address = net.JoinHostPort(address, "3001")
+	}
+	return rcf.dialControlConn(ctx, address)
+}
+
+func (rcf *rawConnectionsFactory) dialControlConn(ctx context.Context, address string) (ControlConn, error) {
 	conn, err := rcf.dialer.DialContext(ctx, "tcp", address)
 	if err != nil {
 		return nil, err

@@ -67,13 +67,25 @@ type ControlConn interface {
 	Close() error
 }
 
-// ConnectionsFactory creates connections.
+// ConnectionsFactory creates connections. There are several ndt5
+// transports (e.g. raw TCP, WebSocket) and, for each of them, there
+// is a specific ConnectionFactory that you can use.
 type ConnectionsFactory interface {
+	// DialControlConn dials a control connection. The code shall check
+	// whether the address contain a port and use the default port for
+	// the specific transport otherwise.
 	DialControlConn(ctx context.Context, address string) (ControlConn, error)
+
+	// DialMeasurementConn dials a measurement connection with the
+	// specified address. The caller is supposed to compose such address
+	// by joining together the FQDN currently being used with the port
+	// that has been indicated by the ndt5 server.
 	DialMeasurementConn(ctx context.Context, address string) (MeasurementConn, error)
 }
 
-// Protocol manages a ControlConn
+// Protocol manages a ControlConn. We currently only support the
+// ndt5 control protocol. You may still want to override the protocol
+// instance used by the client for testing purposes.
 type Protocol interface {
 	SendLogin() error
 	ReceiveKickoff() error
@@ -94,18 +106,28 @@ type ProtocolFactory interface {
 	NewProtocol(cc ControlConn) Protocol
 }
 
-// Client is an ndt5 client
+// Client is an ndt5 client.
 type Client struct {
 	// ConnectionsFactory creates connections. It's set to its
 	// default value by NewClient; you may override it.
+	//
+	// By changing this field before starting the experiment
+	// you can choose the specific transport you want.
+	//
+	// The default transport is the raw TCP transport that was
+	// initially introduced with the NDT codebase.
 	ConnectionsFactory ConnectionsFactory
 
 	// ProtocolFactory creates a ControlManager. It's set to its
 	// default value by NewClient; you may override it.
+	//
+	// This is generally only required for testing.
 	ProtocolFactory ProtocolFactory
 
 	// FQDN is the optional server FQDN. We will discover the FQDN of
 	// a nearby M-Lab server for you if this field is empty.
+	//
+	// Setting this field allows you test use a specific server.
 	FQDN string
 
 	// MLabNSClient is the mlabns client. We'll configure it with
@@ -163,8 +185,7 @@ func (c *Client) Start(ctx context.Context) (<-chan *Output, error) {
 		}
 		c.FQDN = fqdn
 	}
-	cc, err := c.ConnectionsFactory.DialControlConn(
-		ctx, net.JoinHostPort(c.FQDN, "3001"))
+	cc, err := c.ConnectionsFactory.DialControlConn(ctx, c.FQDN)
 	if err != nil {
 		return nil, err
 	}
