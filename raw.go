@@ -7,38 +7,42 @@ import (
 	"time"
 )
 
-type rawConnectionsFactory struct {
+// RawConnectionsFactory creates ndt5 connections
+type RawConnectionsFactory struct {
 	dialer *net.Dialer
 }
 
-func newRawConnectionsFactory() *rawConnectionsFactory {
-	return &rawConnectionsFactory{
+// NewRawConnectionsFactory creates a factory for ndt5 connections
+func NewRawConnectionsFactory() *RawConnectionsFactory {
+	return &RawConnectionsFactory{
 		dialer: new(net.Dialer),
 	}
 }
 
-func (rcf *rawConnectionsFactory) DialControlConn(ctx context.Context, address string) (ControlConn, error) {
+// DialControlConn implements ConnectionsFactory.DialControlConn
+func (cf *RawConnectionsFactory) DialControlConn(ctx context.Context, address string) (ControlConn, error) {
 	_, _, err := net.SplitHostPort(address)
 	if err != nil {
 		address = net.JoinHostPort(address, "3001")
 	}
-	return rcf.dialControlConn(ctx, address)
+	return cf.dialControlConn(ctx, address)
 }
 
-func (rcf *rawConnectionsFactory) dialControlConn(ctx context.Context, address string) (ControlConn, error) {
-	conn, err := rcf.dialer.DialContext(ctx, "tcp", address)
+func (cf *RawConnectionsFactory) dialControlConn(ctx context.Context, address string) (ControlConn, error) {
+	conn, err := cf.dialer.DialContext(ctx, "tcp", address)
 	if err != nil {
 		return nil, err
 	}
 	return &rawControlConn{conn: conn}, nil
 }
 
-func (rcf *rawConnectionsFactory) DialMeasurementConn(ctx context.Context, address string) (MeasurementConn, error) {
-	conn, err := rcf.dialer.DialContext(ctx, "tcp", address)
+// DialMeasurementConn implements ConnectionsFactory.DialMeasurementConn.
+func (cf *RawConnectionsFactory) DialMeasurementConn(ctx context.Context, address string) (MeasurementConn, error) {
+	conn, err := cf.dialer.DialContext(ctx, "tcp", address)
 	if err != nil {
 		return nil, err
 	}
-	return conn, nil
+	return &rawMeasurementConn{conn: conn}, nil
 }
 
 type rawControlConn struct {
@@ -49,17 +53,26 @@ func (cc *rawControlConn) SetDeadline(deadline time.Time) error {
 	return cc.conn.SetDeadline(deadline)
 }
 
+func (cc *rawControlConn) WriteLogin(versionCompat string, testSuite []byte) error {
+	// Note that versionCompat is ignored with the legacy login message
+	return cc.WriteMessage(msgLogin, testSuite)
+}
+
+func (cc *rawControlConn) ReadKickoffMessage(b []byte) error {
+	return cc.readn(b)
+}
+
 func (cc *rawControlConn) ReadFrame() (*Frame, error) {
 	// <type: uint8> <length: uint16> <message: [0..65536]byte>
 	b := make([]byte, maxFrameSize)
-	if err := cc.Readn(b[:1]); err != nil {
+	if err := cc.readn(b[:1]); err != nil {
 		return nil, err
 	}
-	if err := cc.Readn(b[1:3]); err != nil {
+	if err := cc.readn(b[1:3]); err != nil {
 		return nil, err
 	}
 	size := binary.BigEndian.Uint16(b[1:3]) + 3
-	if err := cc.Readn(b[3:size]); err != nil {
+	if err := cc.readn(b[3:size]); err != nil {
 		return nil, err
 	}
 	return &Frame{
@@ -82,7 +95,7 @@ func (cc *rawControlConn) WriteFrame(frame *Frame) error {
 	return err
 }
 
-func (cc *rawControlConn) Readn(data []byte) error {
+func (cc *rawControlConn) readn(data []byte) error {
 	// We don't care too much about performance when reading
 	// control messages, hence this simple implementation
 	for off := 0; off < len(data); {
@@ -98,4 +111,37 @@ func (cc *rawControlConn) Readn(data []byte) error {
 
 func (cc *rawControlConn) Close() error {
 	return cc.conn.Close()
+}
+
+type rawMeasurementConn struct {
+	conn     net.Conn
+	prepared []byte
+	rbuf     []byte
+}
+
+func (mc *rawMeasurementConn) SetDeadline(deadline time.Time) error {
+	return mc.conn.SetDeadline(deadline)
+}
+
+func (mc *rawMeasurementConn) AllocReadBuffer(bufsiz int) {
+	mc.rbuf = make([]byte, bufsiz)
+}
+
+func (mc *rawMeasurementConn) ReadDiscard() (int64, error) {
+	// We assume the read buffer has been initialized
+	count, err := mc.conn.Read(mc.rbuf)
+	return int64(count), err
+}
+
+func (mc *rawMeasurementConn) SetPreparedMessage(b []byte) {
+	mc.prepared = b
+}
+
+func (mc *rawMeasurementConn) WritePreparedMessage() (int, error) {
+	// We assume the prepared message has been initialized
+	return mc.conn.Write(mc.prepared)
+}
+
+func (mc *rawMeasurementConn) Close() error {
+	return mc.conn.Close()
 }

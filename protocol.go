@@ -18,18 +18,20 @@ type protocolNDT5 struct {
 }
 
 func (p *protocolNDT5) SendLogin() error {
+	const ndt5VersionCompat = "v3.7.0"
 	body := make([]byte, 1)
 	body[0] = nettestUpload | nettestDownload | nettestStatus
-	return p.cc.WriteMessage(msgLogin, body)
+	return p.cc.WriteLogin(ndt5VersionCompat, body)
 }
 
+var kickoffMessage = []byte("123456 654321")
+
 func (p *protocolNDT5) ReceiveKickoff() error {
-	desired := []byte("123456 654321")
-	received := make([]byte, len(desired))
-	if err := p.cc.Readn(received); err != nil {
+	received := make([]byte, len(kickoffMessage))
+	if err := p.cc.ReadKickoffMessage(received); err != nil {
 		return err
 	}
-	if !bytes.Equal(desired, received) {
+	if !bytes.Equal(kickoffMessage, received) {
 		return errors.New("ReceiveKickoff: got invalid kickoff")
 	}
 	return nil

@@ -22,9 +22,28 @@ type MockableMlabNSClient interface {
 
 // MeasurementConn is a measurement connection.
 type MeasurementConn interface {
+	// SetDeadline sets the read and write deadlines.
 	SetDeadline(deadline time.Time) error
-	Read(b []byte) (int, error)
-	Write(b []byte) (int, error)
+
+	// AllocReadBuffer configures the buffer to be used
+	// by ReadDiscard. You MUST call this method before you
+	// call ReadDiscard, or the code will crash.
+	AllocReadBuffer(size int)
+
+	// ReadDiscard reads and discard bytes. Returns the
+	// number of discarded bytes or an error.
+	ReadDiscard() (int64, error)
+
+	// SetPreparedMessage sets the message that you want to
+	// send in WritePreparedMessage. You MUST call this method
+	// before you call WritePreparedMessage, or we'll crash.
+	SetPreparedMessage(b []byte)
+
+	// WritePreparedMessage writes the previously prepared
+	// message. Returns number of bytes written or error.
+	WritePreparedMessage() (int, error)
+
+	// Close closes the measurement connection.
 	Close() error
 }
 
@@ -59,11 +78,29 @@ func NewFrame(mtype uint8, message []byte) (*Frame, error) {
 
 // ControlConn is a control connection.
 type ControlConn interface {
+	// SetDeadline sets the read and write dealines for the conn.
 	SetDeadline(deadline time.Time) error
+
+	// WriteLogin writes the login message using the proper convention
+	// required by the current transport.
+	WriteLogin(versionCompat string, testSuite []byte) error
+
+	// ReadKickoffMessage reads the kickoff message into b. Depending
+	// on the transport we may not read an actual message from the network
+	// rather we'd just pretend doing so.
+	ReadKickoffMessage(b []byte) error
+
+	// ReadFrame reads the next ndt5 frame.
 	ReadFrame() (*Frame, error)
+
+	// WriteMessage writes a ndt5 frame containing the specified ndt5
+	// message type and message data as body.
 	WriteMessage(mtype uint8, data []byte) error
+
+	// WriteFrame writes the specified frame.
 	WriteFrame(frame *Frame) error
-	Readn(data []byte) error
+
+	// Close closes the connection.
 	Close() error
 }
 
@@ -163,10 +200,10 @@ type Speed struct {
 // NewClient creates a new ndt5 client instance.
 func NewClient() *Client {
 	return &Client{
-		ConnectionsFactory: newRawConnectionsFactory(),
+		ConnectionsFactory: NewRawConnectionsFactory(),
 		ProtocolFactory:    new(protocolNDT5Factory),
 		MLabNSClient: mlabns.NewClient(
-			"ndt", "bassosimone-ndt5-client-go/0.0.1",
+			"ndt_ssl", "bassosimone-ndt5-client-go/0.0.1",
 		),
 	}
 }
@@ -197,14 +234,15 @@ func (c *Client) Start(ctx context.Context) (<-chan *Output, error) {
 const (
 	maxResultsLoops = 128
 
-	msgSrvQueue     uint8 = 1
-	msgLogin        uint8 = 2
-	msgTestPrepare  uint8 = 3
-	msgTestStart    uint8 = 4
-	msgTestMsg      uint8 = 5
-	msgTestFinalize uint8 = 6
-	msgResults      uint8 = 8
-	msgLogout       uint8 = 9
+	msgSrvQueue      uint8 = 1
+	msgLogin         uint8 = 2
+	msgTestPrepare   uint8 = 3
+	msgTestStart     uint8 = 4
+	msgTestMsg       uint8 = 5
+	msgTestFinalize  uint8 = 6
+	msgResults       uint8 = 8
+	msgLogout        uint8 = 9
+	msgExtendedLogin uint8 = 11
 
 	nettestUpload   uint8 = 1 << 1
 	nettestDownload uint8 = 1 << 2
@@ -298,8 +336,9 @@ func (c *Client) runUpload(ctx context.Context, proto Protocol, ch chan<- *Outpu
 		return err
 	}
 	c.emitProgress("got TestStart message", ch)
+	testconn.SetPreparedMessage(testdata)
 	testch := make(chan *Speed)
-	go c.uploader(testconn, testdata, testch)
+	go c.uploader(testconn, testch)
 	c.emitProgress("uploader goroutine forked off", ch)
 	for speed := range testch {
 		c.emit(&Output{CurUploadSpeed: speed}, ch)
@@ -323,7 +362,7 @@ func (c *Client) runUpload(ctx context.Context, proto Protocol, ch chan<- *Outpu
 
 // uploader runs the async uploader. It takes ownership of the testconn
 // and closes the testch when it is done.
-func (c *Client) uploader(testconn MeasurementConn, testdata []byte, testch chan<- *Speed) {
+func (c *Client) uploader(testconn MeasurementConn, testch chan<- *Speed) {
 	defer testconn.Close()
 	defer close(testch)
 	var (
@@ -331,7 +370,7 @@ func (c *Client) uploader(testconn MeasurementConn, testdata []byte, testch chan
 		count int64
 	)
 	for {
-		num, err := testconn.Write(testdata)
+		num, err := testconn.WritePreparedMessage()
 		if err != nil {
 			return
 		}
@@ -341,7 +380,7 @@ func (c *Client) uploader(testconn MeasurementConn, testdata []byte, testch chan
 }
 
 func (c *Client) runDownload(ctx context.Context, proto Protocol, ch chan<- *Output) error {
-	testdata := make([]byte, 1<<20)
+	const readBufferSize = 1 << 20
 	portnum, err := proto.ExpectTestPrepare()
 	if err != nil {
 		err = fmt.Errorf("cannot get TestPrepare message: %w", err)
@@ -365,8 +404,9 @@ func (c *Client) runDownload(ctx context.Context, proto Protocol, ch chan<- *Out
 		return err
 	}
 	c.emitProgress("got test start message", ch)
+	testconn.AllocReadBuffer(readBufferSize)
 	testch := make(chan *Speed)
-	go c.downloader(testconn, testdata, testch)
+	go c.downloader(testconn, testch)
 	c.emitProgress("downloader goroutine forked off", ch)
 	var lastSample *Speed
 	for speed := range testch {
@@ -409,7 +449,7 @@ func (c *Client) runDownload(ctx context.Context, proto Protocol, ch chan<- *Out
 }
 
 // downloader is like uploader but for the download.
-func (c *Client) downloader(testconn MeasurementConn, testdata []byte, testch chan<- *Speed) {
+func (c *Client) downloader(testconn MeasurementConn, testch chan<- *Speed) {
 	defer testconn.Close()
 	defer close(testch)
 	var (
@@ -417,11 +457,11 @@ func (c *Client) downloader(testconn MeasurementConn, testdata []byte, testch ch
 		count int64
 	)
 	for {
-		num, err := testconn.Read(testdata)
+		num, err := testconn.ReadDiscard()
 		if err != nil {
 			return
 		}
-		count += int64(num)
+		count += num
 		testch <- &Speed{Count: count, Elapsed: time.Since(begin)}
 	}
 }
