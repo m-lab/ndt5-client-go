@@ -41,12 +41,13 @@ func NewWSConnectionsFactory(scheme string) *WSConnectionsFactory {
 }
 
 // DialControlConn implements ConnectionsFactory.DialControlConn
-func (cf *WSConnectionsFactory) DialControlConn(ctx context.Context, address string) (ControlConn, error) {
+func (cf *WSConnectionsFactory) DialControlConn(
+	ctx context.Context, address, userAgent string) (ControlConn, error) {
 	_, _, err := net.SplitHostPort(address)
 	if err != nil {
 		address = net.JoinHostPort(address, "3010")
 	}
-	conn, err := cf.dial(ctx, address)
+	conn, err := cf.dial(ctx, address, userAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -57,15 +58,17 @@ func (cf *WSConnectionsFactory) DialControlConn(ctx context.Context, address str
 }
 
 // DialMeasurementConn implements ConnectionsFactory.DialMeasurementConn.
-func (cf *WSConnectionsFactory) DialMeasurementConn(ctx context.Context, address string) (MeasurementConn, error) {
-	conn, err := cf.dial(ctx, address)
+func (cf *WSConnectionsFactory) DialMeasurementConn(
+	ctx context.Context, address, userAgent string) (MeasurementConn, error) {
+	conn, err := cf.dial(ctx, address, userAgent)
 	if err != nil {
 		return nil, err
 	}
 	return &wsMeasurementConn{conn: conn}, nil
 }
 
-func (cf *WSConnectionsFactory) dial(ctx context.Context, address string) (*websocket.Conn, error) {
+func (cf *WSConnectionsFactory) dial(
+	ctx context.Context, address, userAgent string) (*websocket.Conn, error) {
 	URL := &url.URL{
 		Scheme: cf.Scheme,
 		Host:   address,
@@ -73,6 +76,7 @@ func (cf *WSConnectionsFactory) dial(ctx context.Context, address string) (*webs
 	}
 	headers := http.Header{}
 	headers.Add("Sec-WebSocket-Protocol", "ndt")
+	headers.Add("User-Agent", userAgent)
 	conn, _, err := cf.Dialer.DialContext(ctx, URL.String(), headers)
 	return conn, err
 }

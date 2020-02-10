@@ -20,7 +20,8 @@ func NewRawConnectionsFactory() *RawConnectionsFactory {
 }
 
 // DialControlConn implements ConnectionsFactory.DialControlConn
-func (cf *RawConnectionsFactory) DialControlConn(ctx context.Context, address string) (ControlConn, error) {
+func (cf *RawConnectionsFactory) DialControlConn(
+	ctx context.Context, address, userAgent string) (ControlConn, error) {
 	_, _, err := net.SplitHostPort(address)
 	if err != nil {
 		address = net.JoinHostPort(address, "3001")
@@ -28,7 +29,8 @@ func (cf *RawConnectionsFactory) DialControlConn(ctx context.Context, address st
 	return cf.dialControlConn(ctx, address)
 }
 
-func (cf *RawConnectionsFactory) dialControlConn(ctx context.Context, address string) (ControlConn, error) {
+func (cf *RawConnectionsFactory) dialControlConn(
+	ctx context.Context, address string) (ControlConn, error) {
 	conn, err := cf.dialer.DialContext(ctx, "tcp", address)
 	if err != nil {
 		return nil, err
@@ -40,7 +42,8 @@ func (cf *RawConnectionsFactory) dialControlConn(ctx context.Context, address st
 }
 
 // DialMeasurementConn implements ConnectionsFactory.DialMeasurementConn.
-func (cf *RawConnectionsFactory) DialMeasurementConn(ctx context.Context, address string) (MeasurementConn, error) {
+func (cf *RawConnectionsFactory) DialMeasurementConn(
+	ctx context.Context, address, userAgent string) (MeasurementConn, error) {
 	conn, err := cf.dialer.DialContext(ctx, "tcp", address)
 	if err != nil {
 		return nil, err

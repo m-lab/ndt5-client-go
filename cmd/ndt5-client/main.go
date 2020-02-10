@@ -6,19 +6,28 @@ import (
 	"flag"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/bassosimone/ndt5-client-go"
 	"github.com/m-lab/go/flagx"
 	"github.com/m-lab/go/rtx"
 )
 
+const (
+	clientName     = "ndt5-client-go-cmd"
+	clientVersion  = "0.1.0"
+	defaultTimeout = 55 * time.Second
+)
+
 var (
-	flagHostname  = flag.String("hostname", "", "Measurement server hostname")
+	flagHostname = flag.String("hostname", "", "Measurement server hostname")
+	flagTimeout  = flag.Duration(
+		"timeout", defaultTimeout, "time after which the test is aborted")
 	flagTransport = flagx.Enum{
 		Options: []string{"raw", "wss"},
 		Value:   "raw",
 	}
-	flagVerbose  = flag.Bool("verbose", false, "Log ndt5 messages")
+	flagVerbose = flag.Bool("verbose", false, "Log ndt5 messages")
 )
 
 func init() {
@@ -31,7 +40,7 @@ func init() {
 
 func main() {
 	flag.Parse()
-	client := ndt5.NewClient()
+	client := ndt5.NewClient(clientName, clientVersion)
 	switch txp := flagTransport.Value; txp {
 	case "wss":
 		client.ConnectionsFactory = ndt5.NewWSConnectionsFactory(txp)
@@ -41,7 +50,9 @@ func main() {
 	if *flagVerbose {
 		client.ObserverFactory = new(verboseFrameReadWriteObserverFactory)
 	}
-	out, err := client.Start(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), *flagTimeout)
+	defer cancel()
+	out, err := client.Start(ctx)
 	rtx.Must(err, "client.Start failed")
 	var extra string
 	for ev := range out {

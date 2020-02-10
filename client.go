@@ -138,14 +138,17 @@ type ControlConn interface {
 type ConnectionsFactory interface {
 	// DialControlConn dials a control connection. The code shall check
 	// whether the address contain a port and use the default port for
-	// the specific transport otherwise.
-	DialControlConn(ctx context.Context, address string) (ControlConn, error)
+	// the specific transport otherwise. The userAgent string may be used
+	// to construct a User-Agent header when using WebSocket.
+	DialControlConn(ctx context.Context, address, userAgent string) (ControlConn, error)
 
 	// DialMeasurementConn dials a measurement connection with the
 	// specified address. The caller is supposed to compose such address
 	// by joining together the FQDN currently being used with the port
-	// that has been indicated by the ndt5 server.
-	DialMeasurementConn(ctx context.Context, address string) (MeasurementConn, error)
+	// that has been indicated by the ndt5 server. The userAgent string
+	// may be used to construct a User-Agent header when using WebSocket.
+	DialMeasurementConn(
+		ctx context.Context, address, userAgent string) (MeasurementConn, error)
 }
 
 // Protocol manages a ControlConn. We currently only support the
@@ -173,6 +176,14 @@ type ProtocolFactory interface {
 
 // Client is an ndt5 client.
 type Client struct {
+	// ClientName is the name of the software running ndt7 tests. It's set by
+	// NewClient; you may want to change this value.
+	ClientName string
+
+	// ClientVersion is the version of the software running ndt7 tests. It's
+	// set by NewClient; you may want to change this value.
+	ClientVersion string
+
 	// ConnectionsFactory creates connections. It's set to its
 	// default value by NewClient; you may override it.
 	//
@@ -230,19 +241,31 @@ type Speed struct {
 	Elapsed time.Duration // nanoseconds since beginning
 }
 
+const (
+	// libraryName is the name of this library
+	libraryName = "ndt5-client-go"
+
+	// libraryVersion is the version of this library
+	libraryVersion = "0.1.0"
+)
+
 // NewClient creates a new ndt5 client instance.
-//
-// TODO(bassosimone): here we MUST receive the user agent
-// like we already do in ndt7.
-func NewClient() *Client {
+func NewClient(clientName, clientVersion string) *Client {
 	return &Client{
+		ClientName:         clientName,
+		ClientVersion:      clientVersion,
 		ConnectionsFactory: NewRawConnectionsFactory(),
 		ObserverFactory:    new(defaultFrameReadWriteObserverFactory),
 		ProtocolFactory:    new(protocolNDT5Factory),
 		MLabNSClient: mlabns.NewClient(
-			"ndt_ssl", "bassosimone-ndt5-client-go/0.0.1",
+			"ndt_ssl", makeUserAgent(clientName, clientVersion),
 		),
 	}
+}
+
+// makeUserAgent creates the user agent string
+func makeUserAgent(clientName, clientVersion string) string {
+	return clientName + "/" + clientVersion + " " + libraryName + "/" + libraryVersion
 }
 
 // Start discovers a ndt5 server (if needed) and starts the whole ndt5 test. On
@@ -259,7 +282,9 @@ func (c *Client) Start(ctx context.Context) (<-chan *Output, error) {
 		}
 		c.FQDN = fqdn
 	}
-	cc, err := c.ConnectionsFactory.DialControlConn(ctx, c.FQDN)
+	cc, err := c.ConnectionsFactory.DialControlConn(
+		ctx, c.FQDN, makeUserAgent(c.ClientName, c.ClientVersion),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -359,6 +384,7 @@ func (c *Client) runUpload(ctx context.Context, proto Protocol, ch chan<- *Outpu
 	c.emitProgress("got TestPrepare message", ch)
 	testconn, err := c.ConnectionsFactory.DialMeasurementConn(
 		ctx, net.JoinHostPort(c.FQDN, portnum),
+		makeUserAgent(c.ClientName, c.ClientVersion),
 	)
 	if err != nil {
 		err = fmt.Errorf("cannot create measurement connection: %w", err)
@@ -428,6 +454,7 @@ func (c *Client) runDownload(ctx context.Context, proto Protocol, ch chan<- *Out
 	c.emitProgress("got test prepare message", ch)
 	testconn, err := c.ConnectionsFactory.DialMeasurementConn(
 		ctx, net.JoinHostPort(c.FQDN, portnum),
+		makeUserAgent(c.ClientName, c.ClientVersion),
 	)
 	if err != nil {
 		err = fmt.Errorf("cannot create measurement connection: %w", err)
