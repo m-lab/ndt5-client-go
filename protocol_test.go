@@ -362,11 +362,13 @@ func TestUnitProtocolReceiveLogoutOrResultsWrongMessageType(t *testing.T) {
 func NewMockableProtocol(t *testing.T) (*PipeDialer, ndt5.Protocol) {
 	dialer := NewPipeDialer()
 	connfactory := ndt5.NewRawConnectionsFactory(dialer)
-	protofactory := ndt5.NewProtocolNDT5Factory()
-	conn, err := connfactory.DialControlConn(context.Background(), "127.0.0.1", UserAgent)
+	protofactory := ndt5.NewProtocolFactory5()
+	protofactory.ConnectionsFactory = connfactory
+	ch := make(chan *ndt5.Output, 1) // buffer for connected message
+	proto, err := protofactory.NewProtocol(
+		context.Background(), "127.0.0.1", UserAgent, ch)
 	if err != nil {
 		t.Fatal(err)
 	}
-	proto := protofactory.NewProtocol(conn)
 	return dialer, proto
 }

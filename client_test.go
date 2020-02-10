@@ -17,10 +17,12 @@ func TestIntegrationClientRaw(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	client := ndt5.NewClient(clientName, clientVersion)
-	client.ConnectionsFactory = ndt5.NewRawConnectionsFactory(
+	protocolFactory := ndt5.NewProtocolFactory5()
+	protocolFactory.ConnectionsFactory = ndt5.NewRawConnectionsFactory(
 		trafficshaping.NewDialer(),
 	)
+	client := ndt5.NewClient(clientName, clientVersion)
+	client.ProtocolFactory = protocolFactory
 	out, err := client.Start(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -34,10 +36,12 @@ func TestIntegrationClientWSS(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	client := ndt5.NewClient(clientName, clientVersion)
-	client.ConnectionsFactory = ndt5.NewWSConnectionsFactory(
+	protocolFactory := ndt5.NewProtocolFactory5()
+	protocolFactory.ConnectionsFactory = ndt5.NewWSConnectionsFactory(
 		trafficshaping.NewDialer(),
 	)
+	client := ndt5.NewClient(clientName, clientVersion)
+	client.ProtocolFactory = protocolFactory
 	out, err := client.Start(context.Background())
 	if err != nil {
 		t.Fatal(err)

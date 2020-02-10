@@ -47,17 +47,19 @@ func main() {
 	if *flagThrottle {
 		dialer = trafficshaping.NewDialer()
 	}
-	client := ndt5.NewClient(clientName, clientVersion)
+	protocolFactory := ndt5.NewProtocolFactory5()
 	switch txp := flagTransport.Value; txp {
 	case "wss":
-		client.ConnectionsFactory = ndt5.NewWSConnectionsFactory(dialer)
+		protocolFactory.ConnectionsFactory = ndt5.NewWSConnectionsFactory(dialer)
 	case "raw":
-		client.ConnectionsFactory = ndt5.NewRawConnectionsFactory(dialer)
+		protocolFactory.ConnectionsFactory = ndt5.NewRawConnectionsFactory(dialer)
 	}
-	client.FQDN = *flagHostname
 	if *flagVerbose {
-		client.ObserverFactory = new(verboseFrameReadWriteObserverFactory)
+		protocolFactory.ObserverFactory = new(verboseFrameReadWriteObserverFactory)
 	}
+	client := ndt5.NewClient(clientName, clientVersion)
+	client.ProtocolFactory = protocolFactory
+	client.FQDN = *flagHostname
 	ctx, cancel := context.WithTimeout(context.Background(), *flagTimeout)
 	defer cancel()
 	out, err := client.Start(ctx)

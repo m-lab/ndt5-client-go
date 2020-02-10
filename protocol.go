@@ -2,22 +2,62 @@ package ndt5
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strconv"
+	"time"
 )
 
-type protocolNDT5Factory struct{}
+// ProtocolFactory5 is a factory that creates the ndt5 protocol
+type ProtocolFactory5 struct {
+	// ConnectionsFactory creates connections. It's set to its
+	// default value by NewClient; you may override it.
+	//
+	// By changing this field before starting the experiment
+	// you can choose the specific transport you want.
+	//
+	// The default transport is the raw TCP transport that was
+	// initially introduced with the NDT codebase.
+	ConnectionsFactory ConnectionsFactory
 
-func (p *protocolNDT5Factory) NewProtocol(cc ControlConn) Protocol {
-	return &protocolNDT5{cc: cc}
+	// ObserverFactory allows you to observe frame events. It's set to its
+	// default value by NewClient; you may override it.
+	ObserverFactory FrameReadWriteObserverFactory
 }
 
-type protocolNDT5 struct {
-	cc ControlConn
+// NewProtocolFactory5 creates a new ProtocolFactory5 instance
+func NewProtocolFactory5() *ProtocolFactory5 {
+	return &ProtocolFactory5{
+		ConnectionsFactory: NewRawConnectionsFactory(new(net.Dialer)),
+		ObserverFactory:    new(defaultFrameReadWriteObserverFactory),
+	}
 }
 
-func (p *protocolNDT5) SendLogin() error {
+// NewProtocol implements ProtocolFactory.NewProtocol
+func (p *ProtocolFactory5) NewProtocol(
+	ctx context.Context, fqdn, userAgent string, ch chan<- *Output) (Protocol, error) {
+	cc, err := p.ConnectionsFactory.DialControlConn(ctx, fqdn, userAgent)
+	if err != nil {
+		return nil, err
+	}
+	cc.SetFrameReadWriteObserver(p.ObserverFactory.New(ch))
+	if err := cc.SetDeadline(time.Now().Add(45 * time.Second)); err != nil {
+		return nil, fmt.Errorf("cannot set control connection deadline: %w", err)
+	}
+	ch <- &Output{InfoMessage: &LogMessage{
+		Message: fmt.Sprintf("connected to remote server: %s", fqdn),
+	}}
+	return &protocol5{cc: cc, connectionsFactory: p.ConnectionsFactory}, nil
+}
+
+type protocol5 struct {
+	cc                 ControlConn
+	connectionsFactory ConnectionsFactory
+}
+
+func (p *protocol5) SendLogin() error {
 	const ndt5VersionCompat = "v3.7.0"
 	flags := nettestUpload | nettestDownload | nettestStatus
 	return p.cc.WriteLogin(ndt5VersionCompat, flags)
@@ -42,7 +82,7 @@ var (
 	kickoffMessage = []byte("123456 654321")
 )
 
-func (p *protocolNDT5) ReceiveKickoff() error {
+func (p *protocol5) ReceiveKickoff() error {
 	received := make([]byte, len(kickoffMessage))
 	if err := p.cc.ReadKickoffMessage(received); err != nil {
 		return err
@@ -53,7 +93,7 @@ func (p *protocolNDT5) ReceiveKickoff() error {
 	return nil
 }
 
-func (p *protocolNDT5) WaitInQueue() error {
+func (p *protocol5) WaitInQueue() error {
 	frame, err := p.cc.ReadFrame()
 	if err != nil {
 		return err
@@ -68,7 +108,7 @@ func (p *protocolNDT5) WaitInQueue() error {
 	return nil
 }
 
-func (p *protocolNDT5) ReceiveVersion() (string, error) {
+func (p *protocol5) ReceiveVersion() (string, error) {
 	frame, err := p.cc.ReadFrame()
 	if err != nil {
 		return "", err
@@ -79,7 +119,7 @@ func (p *protocolNDT5) ReceiveVersion() (string, error) {
 	return string(frame.Message), nil
 }
 
-func (p *protocolNDT5) ReceiveTestIDs() ([]uint8, error) {
+func (p *protocol5) ReceiveTestIDs() ([]uint8, error) {
 	frame, err := p.cc.ReadFrame()
 	if err != nil {
 		return nil, err
@@ -102,7 +142,7 @@ func (p *protocolNDT5) ReceiveTestIDs() ([]uint8, error) {
 	return testIDs, nil
 }
 
-func (p *protocolNDT5) ExpectTestPrepare() (port string, err error) {
+func (p *protocol5) ExpectTestPrepare() (port string, err error) {
 	frame, err := p.cc.ReadFrame()
 	if err != nil {
 		return
@@ -115,7 +155,19 @@ func (p *protocolNDT5) ExpectTestPrepare() (port string, err error) {
 	return
 }
 
-func (p *protocolNDT5) ExpectTestStart() error {
+func (p *protocol5) DialDownloadConn(
+	ctx context.Context, address, userAgent string,
+) (MeasurementConn, error) {
+	return p.connectionsFactory.DialMeasurementConn(ctx, address, userAgent)
+}
+
+func (p *protocol5) DialUploadConn(
+	ctx context.Context, address, userAgent string,
+) (MeasurementConn, error) {
+	return p.connectionsFactory.DialMeasurementConn(ctx, address, userAgent)
+}
+
+func (p *protocol5) ExpectTestStart() error {
 	frame, err := p.cc.ReadFrame()
 	if err != nil {
 		return err
@@ -126,7 +178,7 @@ func (p *protocolNDT5) ExpectTestStart() error {
 	return nil
 }
 
-func (p *protocolNDT5) ExpectTestMsg() (string, error) {
+func (p *protocol5) ExpectTestMsg() (string, error) {
 	frame, err := p.cc.ReadFrame()
 	if err != nil {
 		return "", err
@@ -140,7 +192,7 @@ func (p *protocolNDT5) ExpectTestMsg() (string, error) {
 	return string(frame.Message), nil
 }
 
-func (p *protocolNDT5) ExpectTestFinalize() error {
+func (p *protocol5) ExpectTestFinalize() error {
 	frame, err := p.cc.ReadFrame()
 	if err != nil {
 		return err
@@ -151,11 +203,11 @@ func (p *protocolNDT5) ExpectTestFinalize() error {
 	return nil
 }
 
-func (p *protocolNDT5) SendTestMsg(data []byte) error {
+func (p *protocol5) SendTestMsg(data []byte) error {
 	return p.cc.WriteMessage(msgTestMsg, data)
 }
 
-func (p *protocolNDT5) ReceiveTestFinalizeOrTestMsg() (uint8, []byte, error) {
+func (p *protocol5) ReceiveTestFinalizeOrTestMsg() (uint8, []byte, error) {
 	frame, err := p.cc.ReadFrame()
 	if err != nil {
 		return 0, nil, err
@@ -170,7 +222,7 @@ func (p *protocolNDT5) ReceiveTestFinalizeOrTestMsg() (uint8, []byte, error) {
 	return msgTestMsg, frame.Message, nil
 }
 
-func (p *protocolNDT5) ReceiveLogoutOrResults() (uint8, []byte, error) {
+func (p *protocol5) ReceiveLogoutOrResults() (uint8, []byte, error) {
 	frame, err := p.cc.ReadFrame()
 	if err != nil {
 		return 0, nil, err
@@ -183,4 +235,8 @@ func (p *protocolNDT5) ReceiveLogoutOrResults() (uint8, []byte, error) {
 		return 0, nil, err
 	}
 	return msgResults, frame.Message, nil
+}
+
+func (p *protocol5) Close() error {
+	return p.cc.Close()
 }

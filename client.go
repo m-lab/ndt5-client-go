@@ -171,17 +171,21 @@ type Protocol interface {
 	ReceiveVersion() (version string, err error)
 	ReceiveTestIDs() (ids []uint8, err error)
 	ExpectTestPrepare() (portnum string, err error)
+	DialDownloadConn(ctx context.Context, address, userAgent string) (MeasurementConn, error)
+	DialUploadConn(ctx context.Context, address, userAgent string) (MeasurementConn, error)
 	ExpectTestStart() error
 	ExpectTestMsg() (info string, err error)
 	ExpectTestFinalize() error
 	SendTestMsg(data []byte) error
 	ReceiveTestFinalizeOrTestMsg() (mtype uint8, mdata []byte, err error)
 	ReceiveLogoutOrResults() (mtype uint8, mdata []byte, err error)
+	Close() error
 }
 
 // ProtocolFactory creates a Protocol.
 type ProtocolFactory interface {
-	NewProtocol(cc ControlConn) Protocol
+	NewProtocol(
+		ctx context.Context, fqdn, userAgent string, ch chan<- *Output) (Protocol, error)
 }
 
 // Client is an ndt5 client.
@@ -193,20 +197,6 @@ type Client struct {
 	// ClientVersion is the version of the software running ndt7 tests. It's
 	// set by NewClient; you may want to change this value.
 	ClientVersion string
-
-	// ConnectionsFactory creates connections. It's set to its
-	// default value by NewClient; you may override it.
-	//
-	// By changing this field before starting the experiment
-	// you can choose the specific transport you want.
-	//
-	// The default transport is the raw TCP transport that was
-	// initially introduced with the NDT codebase.
-	ConnectionsFactory ConnectionsFactory
-
-	// ObserverFactory allows you to observe frame events. It's set to its
-	// default value by NewClient; you may override it.
-	ObserverFactory FrameReadWriteObserverFactory
 
 	// ProtocolFactory creates a ControlManager. It's set to its
 	// default value by NewClient; you may override it.
@@ -262,11 +252,9 @@ const (
 // NewClient creates a new ndt5 client instance.
 func NewClient(clientName, clientVersion string) *Client {
 	return &Client{
-		ClientName:         clientName,
-		ClientVersion:      clientVersion,
-		ConnectionsFactory: NewRawConnectionsFactory(new(net.Dialer)),
-		ObserverFactory:    new(defaultFrameReadWriteObserverFactory),
-		ProtocolFactory:    new(protocolNDT5Factory),
+		ClientName:      clientName,
+		ClientVersion:   clientVersion,
+		ProtocolFactory: new(ProtocolFactory5),
 		MLabNSClient: mlabns.NewClient(
 			"ndt_ssl", makeUserAgent(clientName, clientVersion),
 		),
@@ -292,15 +280,14 @@ func (c *Client) Start(ctx context.Context) (<-chan *Output, error) {
 		}
 		c.FQDN = fqdn
 	}
-	cc, err := c.ConnectionsFactory.DialControlConn(
-		ctx, c.FQDN, makeUserAgent(c.ClientName, c.ClientVersion),
+	ch := make(chan *Output, 1) // buffer for connection established message
+	proto, err := c.ProtocolFactory.NewProtocol(
+		ctx, c.FQDN, makeUserAgent(c.ClientName, c.ClientVersion), ch,
 	)
 	if err != nil {
 		return nil, err
 	}
-	ch := make(chan *Output)
-	cc.SetFrameReadWriteObserver(c.ObserverFactory.New(ch))
-	go c.run(ctx, cc, ch)
+	go c.run(ctx, proto, ch)
 	return ch, nil
 }
 
@@ -324,15 +311,9 @@ const (
 
 // run performs the ndt5 experiment. This function takes ownership of
 // the conn argument and will close the ch argument when done.
-func (c *Client) run(ctx context.Context, cc ControlConn, ch chan<- *Output) {
+func (c *Client) run(ctx context.Context, proto Protocol, ch chan<- *Output) {
 	defer close(ch)
-	defer cc.Close()
-	if err := cc.SetDeadline(time.Now().Add(45 * time.Second)); err != nil {
-		c.emitError(fmt.Errorf("cannot set control connection deadline: %w", err), ch)
-		return
-	}
-	proto := c.ProtocolFactory.NewProtocol(cc)
-	c.emitProgress(fmt.Sprintf("connected to remote server: %s", c.FQDN), ch)
+	defer proto.Close()
 	if err := proto.SendLogin(); err != nil {
 		c.emitError(fmt.Errorf("cannot send login message: %w", err), ch)
 		return
@@ -392,7 +373,7 @@ func (c *Client) runUpload(ctx context.Context, proto Protocol, ch chan<- *Outpu
 		return err
 	}
 	c.emitProgress("got TestPrepare message", ch)
-	testconn, err := c.ConnectionsFactory.DialMeasurementConn(
+	testconn, err := proto.DialUploadConn(
 		ctx, net.JoinHostPort(c.FQDN, portnum),
 		makeUserAgent(c.ClientName, c.ClientVersion),
 	)
@@ -462,7 +443,7 @@ func (c *Client) runDownload(ctx context.Context, proto Protocol, ch chan<- *Out
 		return err
 	}
 	c.emitProgress("got test prepare message", ch)
-	testconn, err := c.ConnectionsFactory.DialMeasurementConn(
+	testconn, err := proto.DialDownloadConn(
 		ctx, net.JoinHostPort(c.FQDN, portnum),
 		makeUserAgent(c.ClientName, c.ClientVersion),
 	)
