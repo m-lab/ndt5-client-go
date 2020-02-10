@@ -67,14 +67,22 @@ func (cf *WSConnectionsFactory) DialMeasurementConn(
 }
 
 func (cf *WSConnectionsFactory) dial(
-	ctx context.Context, address, userAgent string) (*websocket.Conn, error) {
+	ctx context.Context, address, userAgent string,
+) (*websocket.Conn, error) {
+	return cf.DialEx(ctx, address, "/ndt_protocol", "ndt", userAgent)
+}
+
+// DialEx is the extended WebSocket dial function
+func (cf *WSConnectionsFactory) DialEx(
+	ctx context.Context, address, path, userAgent, wsProtocol string,
+) (*websocket.Conn, error) {
 	URL := &url.URL{
 		Scheme: cf.Scheme,
 		Host:   address,
-		Path:   "/ndt_protocol",
+		Path:   path,
 	}
 	headers := http.Header{}
-	headers.Add("Sec-WebSocket-Protocol", "ndt")
+	headers.Add("Sec-WebSocket-Protocol", wsProtocol)
 	headers.Add("User-Agent", userAgent)
 	conn, _, err := cf.Dialer.DialContext(ctx, URL.String(), headers)
 	return conn, err
@@ -211,12 +219,9 @@ func (mc *wsMeasurementConn) AllocReadBuffer(bufsiz int) {
 }
 
 func (mc *wsMeasurementConn) ReadDiscard() (int64, error) {
-	mtype, reader, err := mc.conn.NextReader()
+	_, reader, err := mc.conn.NextReader()
 	if err != nil {
 		return 0, err
-	}
-	if mtype != websocket.BinaryMessage {
-		return 0, errors.New("ws: expected BinaryMessage")
 	}
 	return io.Copy(ioutil.Discard, reader)
 }

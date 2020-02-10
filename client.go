@@ -314,6 +314,7 @@ const (
 func (c *Client) run(ctx context.Context, proto Protocol, ch chan<- *Output) {
 	defer close(ch)
 	defer proto.Close()
+	c.emitProgress(fmt.Sprintf("using %s", c.FQDN), ch)
 	if err := proto.SendLogin(); err != nil {
 		c.emitError(fmt.Errorf("cannot send login message: %w", err), ch)
 		return

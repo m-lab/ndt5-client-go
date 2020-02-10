@@ -23,21 +23,21 @@ const (
 
 var (
 	flagHostname = flag.String("hostname", "", "Measurement server hostname")
+	flagProtocol = flagx.Enum{
+		Options: []string{"ndt5", "ndt5+wss", "ndt7"},
+		Value:   "ndt5",
+	}
 	flagThrottle = flag.Bool("throttle", false, "Throttle connections for testing")
 	flagTimeout  = flag.Duration(
 		"timeout", defaultTimeout, "time after which the test is aborted")
-	flagTransport = flagx.Enum{
-		Options: []string{"raw", "wss"},
-		Value:   "raw",
-	}
 	flagVerbose = flag.Bool("verbose", false, "Log ndt5 messages")
 )
 
 func init() {
 	flag.Var(
-		&flagTransport,
-		"transport",
-		`Transport to use: "raw" (the default), or "wss"`,
+		&flagProtocol,
+		"protocol",
+		`Protocol to use: "ndt5" (the default), "ndt5+wss", or "ndt7"`,
 	)
 }
 
@@ -47,15 +47,22 @@ func main() {
 	if *flagThrottle {
 		dialer = trafficshaping.NewDialer()
 	}
-	protocolFactory := ndt5.NewProtocolFactory5()
-	switch txp := flagTransport.Value; txp {
-	case "wss":
-		protocolFactory.ConnectionsFactory = ndt5.NewWSConnectionsFactory(dialer)
-	case "raw":
-		protocolFactory.ConnectionsFactory = ndt5.NewRawConnectionsFactory(dialer)
-	}
-	if *flagVerbose {
-		protocolFactory.ObserverFactory = new(verboseFrameReadWriteObserverFactory)
+	var protocolFactory ndt5.ProtocolFactory
+	switch flagProtocol.Value {
+	case "ndt5", "ndt5+wss":
+		factory5 := ndt5.NewProtocolFactory5()
+		switch flagProtocol.Value {
+		case "ndt5":
+			factory5.ConnectionsFactory = ndt5.NewRawConnectionsFactory(dialer)
+		case "ndt5+wss":
+			factory5.ConnectionsFactory = ndt5.NewWSConnectionsFactory(dialer)
+		}
+		if *flagVerbose {
+			factory5.ObserverFactory = new(verboseFrameReadWriteObserverFactory)
+		}
+		protocolFactory = factory5
+	case "ndt7":
+		protocolFactory = ndt5.NewProtocolFactory7()
 	}
 	client := ndt5.NewClient(clientName, clientVersion)
 	client.ProtocolFactory = protocolFactory

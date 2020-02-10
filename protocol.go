@@ -46,9 +46,6 @@ func (p *ProtocolFactory5) NewProtocol(
 	if err := cc.SetDeadline(time.Now().Add(45 * time.Second)); err != nil {
 		return nil, fmt.Errorf("cannot set control connection deadline: %w", err)
 	}
-	ch <- &Output{InfoMessage: &LogMessage{
-		Message: fmt.Sprintf("connected to remote server: %s", fqdn),
-	}}
 	return &protocol5{cc: cc, connectionsFactory: p.ConnectionsFactory}, nil
 }
 
