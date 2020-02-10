@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/bassosimone/ndt5-client-go"
-	"github.com/google/martian/v3/trafficshape"
+	"github.com/bassosimone/ndt5-client-go/internal/trafficshaping"
 	"github.com/m-lab/go/flagx"
 	"github.com/m-lab/go/rtx"
 )
@@ -45,12 +45,12 @@ func main() {
 	flag.Parse()
 	var dialer ndt5.NetDialer = new(net.Dialer)
 	if *flagThrottle {
-		dialer = &shapedDialer{dialer: dialer}
+		dialer = trafficshaping.NewDialer()
 	}
 	client := ndt5.NewClient(clientName, clientVersion)
 	switch txp := flagTransport.Value; txp {
 	case "wss":
-		client.ConnectionsFactory = ndt5.NewWSConnectionsFactory(dialer, txp)
+		client.ConnectionsFactory = ndt5.NewWSConnectionsFactory(dialer)
 	case "raw":
 		client.ConnectionsFactory = ndt5.NewRawConnectionsFactory(dialer)
 	}
@@ -134,24 +134,4 @@ func (observer *verboseFrameReadWriteObserver) reformat(prefix, message string) 
 		}
 	}
 	return builder.String()
-}
-
-type shapedDialer struct {
-	dialer ndt5.NetDialer
-}
-
-func (d *shapedDialer) Dial(network, address string) (net.Conn, error) {
-	return d.DialContext(context.Background(), network, address)
-}
-
-func (d *shapedDialer) DialContext(
-	ctx context.Context, network, address string) (net.Conn, error) {
-	conn, err := d.dialer.DialContext(ctx, network, address)
-	if err != nil {
-		return nil, err
-	}
-	listener := trafficshape.NewListener(new(net.TCPListener))
-	listener.SetReadBitrate(1 << 20)
-	listener.SetWriteBitrate(1 << 20)
-	return listener.GetTrafficShapedConn(conn), nil
 }

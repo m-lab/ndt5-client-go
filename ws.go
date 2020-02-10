@@ -18,14 +18,14 @@ import (
 	"github.com/m-lab/go/rtx"
 )
 
-// WSConnectionsFactory creates ndt5+ws{,s} connections
+// WSConnectionsFactory creates ndt5+wss connections
 type WSConnectionsFactory struct {
 	Dialer *websocket.Dialer
 	Scheme string
 }
 
-// NewWSConnectionsFactory returns a factory for ndt5+ws{,s} connections
-func NewWSConnectionsFactory(dialer NetDialer, scheme string) *WSConnectionsFactory {
+// NewWSConnectionsFactory returns a factory for ndt5+wss connections
+func NewWSConnectionsFactory(dialer NetDialer) *WSConnectionsFactory {
 	const bufferSize = 1 << 20
 	return &WSConnectionsFactory{
 		Dialer: &websocket.Dialer{
@@ -35,7 +35,7 @@ func NewWSConnectionsFactory(dialer NetDialer, scheme string) *WSConnectionsFact
 			ReadBufferSize:   bufferSize,
 			WriteBufferSize:  bufferSize,
 		},
-		Scheme: scheme,
+		Scheme: "wss",
 	}
 }
 
