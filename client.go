@@ -425,14 +425,19 @@ func (c *Client) uploader(testconn MeasurementConn, testch chan<- *Speed) {
 		begin = time.Now()
 		count int64
 	)
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
 	for {
 		num, err := testconn.WritePreparedMessage()
 		if err != nil {
 			return
 		}
 		count += int64(num)
-		// TODO(bassosimone): this should be nonblocking
-		testch <- &Speed{Count: count, Elapsed: time.Since(begin)}
+		select {
+		case <-ticker.C:
+			testch <- &Speed{Count: count, Elapsed: time.Since(begin)}
+		default:
+		}
 	}
 }
 
@@ -514,14 +519,19 @@ func (c *Client) downloader(testconn MeasurementConn, testch chan<- *Speed) {
 		begin = time.Now()
 		count int64
 	)
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
 	for {
 		num, err := testconn.ReadDiscard()
 		if err != nil {
 			return
 		}
 		count += num
-		// TODO(bassosimone): this should be nonblocking
-		testch <- &Speed{Count: count, Elapsed: time.Since(begin)}
+		select {
+		case <-ticker.C:
+			testch <- &Speed{Count: count, Elapsed: time.Since(begin)}
+		default:
+		}
 	}
 }
 
