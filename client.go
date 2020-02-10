@@ -64,11 +64,15 @@ const (
 	maxFrameSize   = 3 + maxMessageSize
 )
 
+// ErrMessageSize indicates that a message is larger than the maximum
+// message size than a ndt5 frame can transport.
+var ErrMessageSize = errors.New("message too large for ndt5 frame")
+
 // NewFrame creates a new frame
 func NewFrame(mtype uint8, message []byte) (*Frame, error) {
 	// <type: uint8> <length: uint16> <message: [0..65535]byte>
 	if len(message) > maxMessageSize {
-		return nil, errors.New("message too large for frame")
+		return nil, ErrMessageSize
 	}
 	b := make([]byte, len(message)+3)
 	b[0] = mtype
