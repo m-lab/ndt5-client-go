@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/bassosimone/ndt5-client-go"
+	"github.com/m-lab/ndt5-client-go"
 )
 
 // This shows how to run a ndt5 test.

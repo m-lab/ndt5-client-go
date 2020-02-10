@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bassosimone/ndt5-client-go"
-	"github.com/bassosimone/ndt5-client-go/internal/trafficshaping"
 	"github.com/m-lab/go/flagx"
 	"github.com/m-lab/go/rtx"
+	"github.com/m-lab/ndt5-client-go"
+	"github.com/m-lab/ndt5-client-go/internal/trafficshaping"
 )
 
 const (

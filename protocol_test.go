@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/bassosimone/ndt5-client-go"
+	"github.com/m-lab/ndt5-client-go"
 )
 
 func TestUnitProtocolReceiveKickoffReadKickoffError(t *testing.T) {

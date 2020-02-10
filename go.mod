@@ -1,4 +1,4 @@
-module github.com/bassosimone/ndt5-client-go
+module github.com/m-lab/ndt5-client-go
 
 go 1.13
 

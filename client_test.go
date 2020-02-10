@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/bassosimone/ndt5-client-go"
-	"github.com/bassosimone/ndt5-client-go/internal/trafficshaping"
+	"github.com/m-lab/ndt5-client-go"
+	"github.com/m-lab/ndt5-client-go/internal/trafficshaping"
 )
 
 const (
