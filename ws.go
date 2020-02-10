@@ -25,9 +25,8 @@ type WSConnectionsFactory struct {
 }
 
 // NewWSConnectionsFactory returns a factory for ndt5+ws{,s} connections
-func NewWSConnectionsFactory(scheme string) *WSConnectionsFactory {
+func NewWSConnectionsFactory(dialer NetDialer, scheme string) *WSConnectionsFactory {
 	const bufferSize = 1 << 20
-	dialer := new(net.Dialer)
 	return &WSConnectionsFactory{
 		Dialer: &websocket.Dialer{
 			NetDial:          dialer.Dial,

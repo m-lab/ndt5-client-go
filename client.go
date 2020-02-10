@@ -14,8 +14,14 @@ import (
 	"github.com/m-lab/ndt7-client-go/mlabns"
 )
 
-// MockableMlabNSClient is a mockable mlab-ns client
-type MockableMlabNSClient interface {
+// NetDialer is a network dialer.
+type NetDialer interface {
+	Dial(network, address string) (net.Conn, error)
+	DialContext(ctx context.Context, network, address string) (net.Conn, error)
+}
+
+// MlabNSClient is an mlab-ns client.
+type MlabNSClient interface {
 	Query(ctx context.Context) (fqdn string, err error)
 }
 
@@ -212,7 +218,7 @@ type Client struct {
 
 	// MLabNSClient is the mlabns client. We'll configure it with
 	// defaults in NewClient and you may override it.
-	MLabNSClient MockableMlabNSClient
+	MLabNSClient MlabNSClient
 }
 
 // Output is the output emitted by ndt5
@@ -254,7 +260,7 @@ func NewClient(clientName, clientVersion string) *Client {
 	return &Client{
 		ClientName:         clientName,
 		ClientVersion:      clientVersion,
-		ConnectionsFactory: NewRawConnectionsFactory(),
+		ConnectionsFactory: NewRawConnectionsFactory(new(net.Dialer)),
 		ObserverFactory:    new(defaultFrameReadWriteObserverFactory),
 		ProtocolFactory:    new(protocolNDT5Factory),
 		MLabNSClient: mlabns.NewClient(

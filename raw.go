@@ -9,14 +9,12 @@ import (
 
 // RawConnectionsFactory creates ndt5 connections
 type RawConnectionsFactory struct {
-	dialer *net.Dialer
+	dialer NetDialer
 }
 
 // NewRawConnectionsFactory creates a factory for ndt5 connections
-func NewRawConnectionsFactory() *RawConnectionsFactory {
-	return &RawConnectionsFactory{
-		dialer: new(net.Dialer),
-	}
+func NewRawConnectionsFactory(dialer NetDialer) *RawConnectionsFactory {
+	return &RawConnectionsFactory{dialer: dialer}
 }
 
 // DialControlConn implements ConnectionsFactory.DialControlConn
