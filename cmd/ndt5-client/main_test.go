@@ -29,18 +29,6 @@ func TestIntegrationMainWSS(t *testing.T) {
 	main()
 }
 
-func TestIntegrationMain7(t *testing.T) {
-	if testing.Short() {
-		t.Skip()
-	}
-	origValue := flagProtocol.Value
-	flagProtocol.Value = "ndt7"
-	defer func() {
-		flagProtocol.Value = origValue
-	}()
-	main()
-}
-
 func TestMain(m *testing.M) {
 	*flagThrottle = true // be gentle on CI servers
 	code := m.Run()

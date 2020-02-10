@@ -50,22 +50,3 @@ func TestIntegrationClientWSS(t *testing.T) {
 		t.Logf("%+v", ev)
 	}
 }
-
-func TestIntegrationClient7(t *testing.T) {
-	if testing.Short() {
-		t.Skip()
-	}
-	protocolFactory := ndt5.NewProtocolFactory7()
-	protocolFactory.ConnectionsFactory = ndt5.NewWSConnectionsFactory(
-		trafficshaping.NewDialer(),
-	)
-	client := ndt5.NewClient(clientName, clientVersion)
-	client.ProtocolFactory = protocolFactory
-	out, err := client.Start(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for ev := range out {
-		t.Logf("%+v", ev)
-	}
-}
