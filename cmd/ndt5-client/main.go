@@ -6,12 +6,15 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/m-lab/go/flagx"
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/ndt5-client-go"
+	"github.com/m-lab/ndt5-client-go/cmd/ndt5-client/internal/emitter"
 	"github.com/m-lab/ndt5-client-go/internal/trafficshaping"
 )
 
@@ -60,37 +63,85 @@ func main() {
 	client := ndt5.NewClient(clientName, clientVersion)
 	client.ProtocolFactory = factory5
 	client.FQDN = *flagHostname
+
+	e := emitter.NewJSON(os.Stdout)
+
 	ctx, cancel := context.WithTimeout(context.Background(), *flagTimeout)
 	defer cancel()
 	out, err := client.Start(ctx)
 	rtx.Must(err, "client.Start failed")
-	var extra string
 	for ev := range out {
 		if ev.DebugMessage != nil {
-			fmt.Printf("%s%s\n", extra, strings.Trim(ev.DebugMessage.Message, "\t\n "))
-			extra = ""
+			e.OnDebug(strings.Trim(ev.DebugMessage.Message, "\t\n "))
 		}
 		if ev.InfoMessage != nil {
-			fmt.Printf("%s%s\n", extra, strings.Trim(ev.InfoMessage.Message, "\t\n "))
-			extra = ""
+			e.OnInfo(strings.Trim(ev.InfoMessage.Message, "\t\n "))
 		}
 		if ev.WarningMessage != nil {
-			fmt.Printf("%swarning: %s\n", extra, ev.WarningMessage.Error.Error())
-			extra = ""
+			e.OnWarning(ev.WarningMessage.Error.Error())
 		}
 		if ev.ErrorMessage != nil {
-			fmt.Printf("%serror: %s\n", extra, ev.ErrorMessage.Error.Error())
-			extra = ""
+			e.OnError(ev.ErrorMessage.Error.Error())
 		}
 		if ev.CurDownloadSpeed != nil {
-			fmt.Printf("\rdownload: %s", computeSpeed(ev.CurDownloadSpeed))
-			extra = "\n"
+			e.OnSpeed("download", computeSpeed(ev.CurDownloadSpeed))
 		}
 		if ev.CurUploadSpeed != nil {
-			fmt.Printf("\rupload:   %s", computeSpeed(ev.CurUploadSpeed))
-			extra = "\n"
+			e.OnSpeed("upload", computeSpeed(ev.CurUploadSpeed))
 		}
 	}
+
+	summary := makeSummary(client.FQDN, client.Result)
+	e.OnSummary(summary)
+}
+
+func makeSummary(FQDN string, result ndt5.TestResult) *emitter.Summary {
+	s := emitter.NewSummary(FQDN)
+
+	if clientIP, ok := result.Web100["NDTResult.S2C.ClientIP"]; ok {
+		s.Client = clientIP
+	}
+
+	elapsed := result.ClientMeasuredDownload.Elapsed.Nanoseconds()
+	s.Download = emitter.ValueUnitPair{
+		Value: (8.0 * float64(result.ClientMeasuredDownload.Count)) /
+			float64(elapsed),
+		Unit: "Mbit/s",
+	}
+
+	s.Upload = emitter.ValueUnitPair{
+		// Upload coming from the NDT server is in kbit/second.
+		Value: result.ServerMeasuredUpload / 1000,
+		Unit:  "Mbit/s",
+	}
+
+	// Here we use the RTT provided by the server, assuming they are
+	// symmetrical.
+	if rtt, ok := result.Web100["TCPInfo.RTT"]; ok {
+		rtt, err := strconv.ParseFloat(rtt, 64)
+		if err == nil {
+			s.RTT = emitter.ValueUnitPair{
+				// TCPInfo.RTT is in microseconds.
+				Value: rtt / 1000.0,
+				Unit:  "ms",
+			}
+		}
+	}
+
+	if bytesRetrans, ok := result.Web100["TCPInfo.BytesRetrans"]; ok {
+		if bytesSent, ok := result.Web100["TCPInfo.BytesSent"]; ok {
+			retrans, err1 := strconv.ParseFloat(bytesRetrans, 64)
+			sent, err2 := strconv.ParseFloat(bytesSent, 64)
+
+			if err1 == nil && err2 == nil {
+				s.DownloadRetrans = emitter.ValueUnitPair{
+					Value: retrans / sent * 100,
+					Unit:  "%",
+				}
+			}
+		}
+	}
+	return s
 }
 
 func computeSpeed(speed *ndt5.Speed) string {

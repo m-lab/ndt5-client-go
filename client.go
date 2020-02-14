@@ -9,6 +9,8 @@ import (
 	"math"
 	"math/rand"
 	"net"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/m-lab/ndt7-client-go/mlabns"
@@ -188,6 +190,13 @@ type ProtocolFactory interface {
 		ctx context.Context, fqdn, userAgent string, ch chan<- *Output) (Protocol, error)
 }
 
+// TestResult is a struct storing the results of the NDT5 test.
+type TestResult struct {
+	ClientMeasuredDownload Speed
+	ServerMeasuredUpload   float64
+	Web100                 map[string]string
+}
+
 // Client is an ndt5 client.
 type Client struct {
 	// ClientName is the name of the software running ndt7 tests. It's set by
@@ -213,6 +222,11 @@ type Client struct {
 	// MLabNSClient is the mlabns client. We'll configure it with
 	// defaults in NewClient and you may override it.
 	MLabNSClient MlabNSClient
+
+	// Results is the result of the test. It contains the bytes sent/received
+	// for each test and web100 data sent by the server at the end of an
+	// S2C test.
+	Result TestResult
 }
 
 // Output is the output emitted by ndt5
@@ -405,8 +419,12 @@ func (c *Client) runUpload(ctx context.Context, proto Protocol, ch chan<- *Outpu
 		err = fmt.Errorf("cannot get TestMsg message: %w", err)
 		return err
 	}
-	// TODO(bassosimone): this information should probably be
-	// parsed and emitted in a much more actionable way
+	c.Result.ServerMeasuredUpload, err = strconv.ParseFloat(speed, 64)
+	if err != nil {
+		err = fmt.Errorf("cannot convert server-measured upload speed: %w",
+			err)
+		return err
+	}
 	c.emitProgress(fmt.Sprintf("server-measured speed: %s", speed), ch)
 	if err := proto.ExpectTestFinalize(); err != nil {
 		err = fmt.Errorf("cannot get TestFinalize message: %w", err)
@@ -484,17 +502,21 @@ func (c *Client) runDownload(ctx context.Context, proto Protocol, ch chan<- *Out
 	// TODO(bassosimone): this information should probably be
 	// parsed and emitted in a much more actionable way
 	c.emitProgress(fmt.Sprintf("server-measured speed: %s kbit/s", speed), ch)
+
 	var clientSpeed float64
 	if lastSample != nil {
+		c.Result.ClientMeasuredDownload = *lastSample
 		elapsed := float64(lastSample.Elapsed / time.Millisecond)
 		clientSpeed = 8 * float64(lastSample.Count) / elapsed
 	}
+
 	clientSpeedStr := fmt.Sprintf("%f", clientSpeed)
 	c.emitProgress(fmt.Sprintf("client-measured speed: %s kbit/s", clientSpeedStr), ch)
 	if err := proto.SendTestMsg([]byte(clientSpeedStr)); err != nil {
 		err = fmt.Errorf("cannot seend TestMsg message: %w", err)
 		return err
 	}
+	c.Result.Web100 = map[string]string{}
 	for i := 0; i < maxResultsLoops; i++ {
 		mtype, mdata, err := proto.ReceiveTestFinalizeOrTestMsg()
 		if err != nil {
@@ -505,8 +527,11 @@ func (c *Client) runDownload(ctx context.Context, proto Protocol, ch chan<- *Out
 			c.emitProgress("test terminated", ch)
 			return nil
 		}
-		// TODO(bassosimone): save these messages
 		c.emitProgress(fmt.Sprintf("web100: %s", string(mdata)), ch)
+		err = c.parseWeb100Message(string(mdata))
+		if err != nil {
+			c.emitWarning(err, ch)
+		}
 	}
 	return errors.New("download: too many results")
 }
@@ -560,6 +585,19 @@ func (c *Client) makeBuffer() []byte {
 		b[i] = letterRunes[rnd.Intn(len(letterRunes))]
 	}
 	return b
+}
+
+func (c *Client) parseWeb100Message(m string) error {
+	// A "Web100 message" sent by the NDT server is a colon-delimited
+	// key/value pair. Here we attempt to parse it and store it in the
+	// Results map.
+	kv := strings.SplitN(m, ":", 2)
+	if len(kv) < 2 {
+		return fmt.Errorf("cannot parse web100 message: %s", m)
+	}
+
+	c.Result.Web100[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
+	return nil
 }
 
 func (c *Client) emitError(err error, ch chan<- *Output) {
