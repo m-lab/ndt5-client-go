@@ -30,10 +30,15 @@ var (
 		Options: []string{"ndt5", "ndt5+wss"},
 		Value:   "ndt5",
 	}
+	flagFormat = flagx.Enum{
+		Options: []string{"human", "json"},
+		Value:   "human",
+	}
 	flagThrottle = flag.Bool("throttle", false, "Throttle connections for testing")
 	flagTimeout  = flag.Duration(
 		"timeout", defaultTimeout, "time after which the test is aborted")
 	flagVerbose = flag.Bool("verbose", false, "Log ndt5 messages")
+	flagQuiet   = flag.Bool("quiet", false, "emit summary and errors only")
 )
 
 func init() {
@@ -41,6 +46,11 @@ func init() {
 		&flagProtocol,
 		"protocol",
 		`Protocol to use: "ndt5" or "ndt5+wss"`,
+	)
+	flag.Var(
+		&flagFormat,
+		"format",
+		`Output format: "human" or "json"`,
 	)
 }
 
@@ -64,7 +74,16 @@ func main() {
 	client.ProtocolFactory = factory5
 	client.FQDN = *flagHostname
 
-	e := emitter.NewJSON(os.Stdout)
+	var e emitter.Emitter
+	if flagFormat.Value == "json" {
+		e = emitter.NewJSON(os.Stdout)
+	} else {
+		e = emitter.NewHumanReadable()
+	}
+
+	if *flagQuiet {
+		e = emitter.NewQuiet(e)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), *flagTimeout)
 	defer cancel()
@@ -102,10 +121,10 @@ func makeSummary(FQDN string, result ndt5.TestResult) *emitter.Summary {
 		s.Client = clientIP
 	}
 
-	elapsed := result.ClientMeasuredDownload.Elapsed.Nanoseconds()
+	elapsed := result.ClientMeasuredDownload.Elapsed.Seconds()
 	s.Download = emitter.ValueUnitPair{
 		Value: (8.0 * float64(result.ClientMeasuredDownload.Count)) /
-			float64(elapsed),
+			float64(elapsed) / 1000.0 / 1000.0,
 		Unit: "Mbit/s",
 	}
 
