@@ -7,7 +7,7 @@ import (
 )
 
 // HumanReadable is a human readable emitter. It emits the events generated
-// by running a ndt7 test as pleasant stdout messages.
+// by running a ndt5 test as pleasant stdout messages.
 type HumanReadable struct {
 	out io.Writer
 }

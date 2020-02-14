@@ -1,4 +1,4 @@
-// Package emitter contains the ndt7-client emitter.
+// Package emitter contains the ndt5-client emitter.
 package emitter
 
 // Emitter is a generic emitter. When an event occurs, the

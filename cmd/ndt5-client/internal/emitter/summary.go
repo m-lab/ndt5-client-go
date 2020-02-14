@@ -7,7 +7,7 @@ type ValueUnitPair struct {
 }
 
 // Summary is a struct containing the values displayed to the user at
-// the end of an ndt7 test.
+// the end of an ndt5 test.
 type Summary struct {
 	// Server is the FQDN of the server used for this test.
 	Server string

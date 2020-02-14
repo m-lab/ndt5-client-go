@@ -4,12 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-
-	"github.com/m-lab/ndt7-client-go/spec"
 )
 
 // jsonEmitter is a jsonEmitter emitter. It emits messages consistent with
-// the cmd/ndt7-client/main.go documentation for `-format=json`.
+// the cmd/ndt5-client/main.go documentation for `-format=json`.
 type jsonEmitter struct {
 	io.Writer
 }
@@ -35,12 +33,6 @@ func (j jsonEmitter) emitInterface(any interface{}) error {
 type batchEvent struct {
 	Key   string
 	Value interface{}
-}
-
-type batchValue struct {
-	spec.Measurement
-	Failure string `json:",omitempty"`
-	Server  string `json:",omitempty"`
 }
 
 // OnDebug emits debug events.
