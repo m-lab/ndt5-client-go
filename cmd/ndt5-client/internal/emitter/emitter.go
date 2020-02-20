@@ -22,7 +22,7 @@ type Emitter interface {
 	// OnInfo is emitted on info messages.
 	OnInfo(string) error
 
-	// OnUploadEvent is emitted during the upload.
+	// OnSpeed is emitted during the upload.
 	OnSpeed(string, string) error
 
 	// OnSummary is emitted after the test is over.
