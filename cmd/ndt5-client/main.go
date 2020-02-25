@@ -117,8 +117,16 @@ func main() {
 func makeSummary(FQDN string, result ndt5.TestResult) *emitter.Summary {
 	s := emitter.NewSummary(FQDN)
 
+	if serverIP, ok := result.Web100["NDTResult.S2C.ServerIP"]; ok {
+		s.ServerIP = serverIP
+	}
+
 	if clientIP, ok := result.Web100["NDTResult.S2C.ClientIP"]; ok {
-		s.Client = clientIP
+		s.ClientIP = clientIP
+	}
+
+	if UUID, ok := result.Web100["NDTResult.S2C.UUID"]; ok {
+		s.DownloadUUID = UUID
 	}
 
 	elapsed := result.ClientMeasuredDownload.Elapsed.Seconds()
@@ -134,13 +142,13 @@ func makeSummary(FQDN string, result ndt5.TestResult) *emitter.Summary {
 		Unit:  "Mbit/s",
 	}
 
-	// Here we use the RTT provided by the server, assuming they are
+	// Here we use the MinRTT provided by the server, assuming they are
 	// symmetrical.
-	if rtt, ok := result.Web100["TCPInfo.RTT"]; ok {
+	if rtt, ok := result.Web100["TCPInfo.MinRTT"]; ok {
 		rtt, err := strconv.ParseFloat(rtt, 64)
 		if err == nil {
-			s.RTT = emitter.ValueUnitPair{
-				// TCPInfo.RTT is in microseconds.
+			s.MinRTT = emitter.ValueUnitPair{
+				// TCPInfo.MinRTT is in microseconds.
 				Value: rtt / 1000.0,
 				Unit:  "ms",
 			}
