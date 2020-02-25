@@ -9,11 +9,17 @@ type ValueUnitPair struct {
 // Summary is a struct containing the values displayed to the user at
 // the end of an ndt5 test.
 type Summary struct {
-	// Server is the FQDN of the server used for this test.
-	Server string
+	// ServerFQDN is the FQDN of the server used for this test.
+	ServerFQDN string
 
-	// Client is the IP address of the client.
-	Client string
+	// ServerIP is the IP address of the server.
+	ServerIP string
+
+	// ClientIP is the IP address of the client.
+	ClientIP string
+
+	// DownloadUUID is the UUID of the download test.
+	DownloadUUID string
 
 	// Download is the download speed, in Mbit/s. This is measured at the
 	// receiver.
@@ -26,14 +32,14 @@ type Summary struct {
 	// values provided by the server during a download test.
 	DownloadRetrans ValueUnitPair
 
-	// RTT is the round-trip time of the latest measurement, in milliseconds.
-	// This is provided by the server during a download test.
-	RTT ValueUnitPair
+	// MinRTT is the minimum round-trip time reported by the server in the
+	// last Measurement of a download test, in milliseconds.
+	MinRTT ValueUnitPair
 }
 
 // NewSummary returns a new Summary struct for a given FQDN.
 func NewSummary(FQDN string) *Summary {
 	return &Summary{
-		Server: FQDN,
+		ServerFQDN: FQDN,
 	}
 }

@@ -206,12 +206,12 @@ func TestJSONOnSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output.Client != summary.Client ||
-		output.Server != summary.Server ||
+	if output.ClientIP != summary.ClientIP ||
+		output.ServerFQDN != summary.ServerFQDN ||
 		output.Download != summary.Download ||
 		output.Upload != summary.Upload ||
 		output.DownloadRetrans != summary.DownloadRetrans ||
-		output.RTT != summary.RTT {
+		output.MinRTT != summary.MinRTT {
 		t.Fatal("OnSummary(): unexpected output")
 	}
 

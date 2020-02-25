@@ -106,8 +106,8 @@ func TestHumanReadableOnSummary(t *testing.T) {
  Retransmission:    1.00 %
 `
 	summary := &Summary{
-		Client: "test",
-		Server: "test",
+		ClientIP:   "test",
+		ServerFQDN: "test",
 		Download: ValueUnitPair{
 			Value: 100.0,
 			Unit:  "Mbit/s",
@@ -120,7 +120,7 @@ func TestHumanReadableOnSummary(t *testing.T) {
 			Value: 1.0,
 			Unit:  "%",
 		},
-		RTT: ValueUnitPair{
+		MinRTT: ValueUnitPair{
 			Value: 10.0,
 			Unit:  "ms",
 		},
