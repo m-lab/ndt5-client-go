@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"time"
 
@@ -80,6 +81,9 @@ func (cf *WSConnectionsFactory) DialEx(
 		Scheme: cf.Scheme,
 		Host:   address,
 		Path:   path,
+		// Allow injecting access token queries. If the variable is empty
+		// then this is a no-op.
+		RawQuery: os.Getenv("NDT5_ACCESS_TOKEN"),
 	}
 	headers := http.Header{}
 	headers.Add("Sec-WebSocket-Protocol", wsProtocol)
