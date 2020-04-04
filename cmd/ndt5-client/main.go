@@ -35,7 +35,7 @@ var (
 		Value:   "human",
 	}
 	flagNSURL    = flag.String("ns-url", "https://locate.measurementlab.net/", "Base URL to locate service")
-	flagThrottle = flag.Int64("throttle", 1<<20, "Throttle connections to given rate for testing")
+	flagThrottle = flag.Int64("throttle", 0, "Throttle connections to given rate for testing")
 	flagTimeout  = flag.Duration(
 		"timeout", defaultTimeout, "time after which the test is aborted")
 	flagVerbose = flag.Bool("verbose", false, "Log ndt5 messages")
