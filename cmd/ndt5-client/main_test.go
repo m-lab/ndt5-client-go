@@ -31,7 +31,7 @@ func TestIntegrationMainWSS(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	// Do not use production servers for CI.
-	*flagHostname = "ndt-mlab4-lga0t.mlab-sandbox.measurement-lab.org"
+	*flagNSURL = "https://mlab-sandbox.appspot.com/"
 	*flagThrottle = 1 << 18 // be gentle on CI servers
 	code := m.Run()
 	os.Exit(code)

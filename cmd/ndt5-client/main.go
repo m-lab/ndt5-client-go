@@ -34,6 +34,7 @@ var (
 		Options: []string{"human", "json"},
 		Value:   "human",
 	}
+	flagNSURL    = flag.String("ns-url", "https://locate.measurementlab.net/", "Base URL to locate service")
 	flagThrottle = flag.Int64("throttle", 1<<20, "Throttle connections to given rate for testing")
 	flagTimeout  = flag.Duration(
 		"timeout", defaultTimeout, "time after which the test is aborted")
@@ -70,7 +71,7 @@ func main() {
 	if *flagVerbose {
 		factory5.ObserverFactory = new(verboseFrameReadWriteObserverFactory)
 	}
-	client := ndt5.NewClient(clientName, clientVersion)
+	client := ndt5.NewClient(clientName, clientVersion, *flagNSURL)
 	client.ProtocolFactory = factory5
 	client.FQDN = *flagHostname
 
