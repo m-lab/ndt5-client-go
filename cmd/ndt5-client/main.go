@@ -34,7 +34,7 @@ var (
 		Options: []string{"human", "json"},
 		Value:   "human",
 	}
-	flagThrottle = flag.Bool("throttle", false, "Throttle connections for testing")
+	flagThrottle = flag.Int64("throttle", 1<<20, "Throttle connections to given rate for testing")
 	flagTimeout  = flag.Duration(
 		"timeout", defaultTimeout, "time after which the test is aborted")
 	flagVerbose = flag.Bool("verbose", false, "Log ndt5 messages")
@@ -57,8 +57,8 @@ func init() {
 func main() {
 	flag.Parse()
 	var dialer ndt5.NetDialer = new(net.Dialer)
-	if *flagThrottle {
-		dialer = trafficshaping.NewDialer()
+	if *flagThrottle > 0 {
+		dialer = trafficshaping.NewDialerWithBitrate(*flagThrottle)
 	}
 	factory5 := ndt5.NewProtocolFactory5()
 	switch flagProtocol.Value {
