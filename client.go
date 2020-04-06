@@ -264,14 +264,14 @@ const (
 )
 
 // NewClient creates a new ndt5 client instance.
-func NewClient(clientName, clientVersion string) *Client {
+func NewClient(clientName, clientVersion, nsURL string) *Client {
+	ns := mlabns.NewClient("ndt_ssl", makeUserAgent(clientName, clientVersion))
+	ns.BaseURL = nsURL
 	return &Client{
 		ClientName:      clientName,
 		ClientVersion:   clientVersion,
 		ProtocolFactory: new(ProtocolFactory5),
-		MLabNSClient: mlabns.NewClient(
-			"ndt_ssl", makeUserAgent(clientName, clientVersion),
-		),
+		MLabNSClient:    ns,
 	}
 }
 

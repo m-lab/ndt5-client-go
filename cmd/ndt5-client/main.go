@@ -34,7 +34,8 @@ var (
 		Options: []string{"human", "json"},
 		Value:   "human",
 	}
-	flagThrottle = flag.Bool("throttle", false, "Throttle connections for testing")
+	flagNSURL    = flag.String("ns-url", "https://locate.measurementlab.net/", "Base URL to locate service")
+	flagThrottle = flag.Int64("throttle", 0, "Throttle connections to given rate for testing (bits/sec)")
 	flagTimeout  = flag.Duration(
 		"timeout", defaultTimeout, "time after which the test is aborted")
 	flagVerbose = flag.Bool("verbose", false, "Log ndt5 messages")
@@ -57,8 +58,8 @@ func init() {
 func main() {
 	flag.Parse()
 	var dialer ndt5.NetDialer = new(net.Dialer)
-	if *flagThrottle {
-		dialer = trafficshaping.NewDialer()
+	if *flagThrottle > 0 {
+		dialer = trafficshaping.NewDialerWithBitrate(*flagThrottle)
 	}
 	factory5 := ndt5.NewProtocolFactory5()
 	switch flagProtocol.Value {
@@ -70,7 +71,7 @@ func main() {
 	if *flagVerbose {
 		factory5.ObserverFactory = new(verboseFrameReadWriteObserverFactory)
 	}
-	client := ndt5.NewClient(clientName, clientVersion)
+	client := ndt5.NewClient(clientName, clientVersion, *flagNSURL)
 	client.ProtocolFactory = factory5
 	client.FQDN = *flagHostname
 
