@@ -38,8 +38,10 @@ var (
 	flagThrottle = flag.Int64("throttle", 0, "Throttle connections to given rate for testing (bits/sec)")
 	flagTimeout  = flag.Duration(
 		"timeout", defaultTimeout, "time after which the test is aborted")
-	flagVerbose = flag.Bool("verbose", false, "Log ndt5 messages")
-	flagQuiet   = flag.Bool("quiet", false, "emit summary and errors only")
+	flagVerbose    = flag.Bool("verbose", false, "Log ndt5 messages")
+	flagQuiet      = flag.Bool("quiet", false, "emit summary and errors only")
+	flagExitOnErr  = flag.Int("exit-on-error", 0, "Exit code to use for errors")
+	flagExitOnWarn = flag.Int("exit-on-warning", 0, "Exit code to use when for warnings")
 )
 
 func init() {
@@ -85,6 +87,7 @@ func main() {
 	if *flagQuiet {
 		e = emitter.NewQuiet(e)
 	}
+	exitCode := 0
 
 	ctx, cancel := context.WithTimeout(context.Background(), *flagTimeout)
 	defer cancel()
@@ -99,9 +102,11 @@ func main() {
 		}
 		if ev.WarningMessage != nil {
 			e.OnWarning(ev.WarningMessage.Error.Error())
+			exitCode = *flagExitOnWarn
 		}
 		if ev.ErrorMessage != nil {
 			e.OnError(ev.ErrorMessage.Error.Error())
+			exitCode = *flagExitOnErr
 		}
 		if ev.CurDownloadSpeed != nil {
 			e.OnSpeed("download", computeSpeed(ev.CurDownloadSpeed))
@@ -113,6 +118,7 @@ func main() {
 
 	summary := makeSummary(client.FQDN, client.Result)
 	e.OnSummary(summary)
+	os.Exit(exitCode)
 }
 
 func makeSummary(FQDN string, result ndt5.TestResult) *emitter.Summary {

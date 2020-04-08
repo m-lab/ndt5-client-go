@@ -12,7 +12,7 @@ import (
 func Example() {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	client := ndt5.NewClient("ndt5-client-go-example", "0.1.0")
+	client := ndt5.NewClient("ndt5-client-go-example", "0.1.0", "https://locate.measurementlab.net")
 	ch, err := client.Start(ctx)
 	if err != nil {
 		log.Fatal(err)

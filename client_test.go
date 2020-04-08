@@ -21,7 +21,7 @@ func TestIntegrationClientRaw(t *testing.T) {
 	protocolFactory.ConnectionsFactory = ndt5.NewRawConnectionsFactory(
 		trafficshaping.NewDialer(),
 	)
-	client := ndt5.NewClient(clientName, clientVersion)
+	client := ndt5.NewClient(clientName, clientVersion, "https://mlab-sandbox.appspot.com")
 	client.ProtocolFactory = protocolFactory
 	out, err := client.Start(context.Background())
 	if err != nil {
@@ -40,7 +40,7 @@ func TestIntegrationClientWSS(t *testing.T) {
 	protocolFactory.ConnectionsFactory = ndt5.NewWSConnectionsFactory(
 		trafficshaping.NewDialer(),
 	)
-	client := ndt5.NewClient(clientName, clientVersion)
+	client := ndt5.NewClient(clientName, clientVersion, "https://mlab-sandbox.appspot.com")
 	client.ProtocolFactory = protocolFactory
 	out, err := client.Start(context.Background())
 	if err != nil {
