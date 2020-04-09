@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"time"
 
@@ -22,11 +21,22 @@ import (
 // WSConnectionsFactory creates ndt5+wss connections
 type WSConnectionsFactory struct {
 	Dialer *websocket.Dialer
-	Scheme string
+	URL    *url.URL
+}
+
+// defaultURL creates the default url for connecting to the NDT wss server.
+func defaultURL() *url.URL {
+	return &url.URL{
+		Scheme: "wss",
+		Path:   "/ndt_protocol",
+	}
 }
 
 // NewWSConnectionsFactory returns a factory for ndt5+wss connections
-func NewWSConnectionsFactory(dialer NetDialer) *WSConnectionsFactory {
+func NewWSConnectionsFactory(dialer NetDialer, u *url.URL) *WSConnectionsFactory {
+	if u == nil {
+		u = defaultURL()
+	}
 	const bufferSize = 1 << 20
 	return &WSConnectionsFactory{
 		Dialer: &websocket.Dialer{
@@ -36,18 +46,16 @@ func NewWSConnectionsFactory(dialer NetDialer) *WSConnectionsFactory {
 			ReadBufferSize:   bufferSize,
 			WriteBufferSize:  bufferSize,
 		},
-		Scheme: "wss",
+		URL: u,
 	}
 }
 
 // DialControlConn implements ConnectionsFactory.DialControlConn
 func (cf *WSConnectionsFactory) DialControlConn(
 	ctx context.Context, address, userAgent string) (ControlConn, error) {
-	_, _, err := net.SplitHostPort(address)
-	if err != nil {
-		address = net.JoinHostPort(address, "3010")
-	}
-	conn, err := cf.dial(ctx, address, userAgent)
+	u := *cf.URL
+	u.Host = net.JoinHostPort(address, "3010")
+	conn, err := cf.DialEx(ctx, u, "ndt", userAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -60,35 +68,23 @@ func (cf *WSConnectionsFactory) DialControlConn(
 // DialMeasurementConn implements ConnectionsFactory.DialMeasurementConn.
 func (cf *WSConnectionsFactory) DialMeasurementConn(
 	ctx context.Context, address, userAgent string) (MeasurementConn, error) {
-	conn, err := cf.dial(ctx, address, userAgent)
+	u := *cf.URL
+	u.Host = address
+	conn, err := cf.DialEx(ctx, u, "ndt", userAgent)
 	if err != nil {
 		return nil, err
 	}
 	return &wsMeasurementConn{conn: conn}, nil
 }
 
-func (cf *WSConnectionsFactory) dial(
-	ctx context.Context, address, userAgent string,
-) (*websocket.Conn, error) {
-	return cf.DialEx(ctx, address, "/ndt_protocol", "ndt", userAgent)
-}
-
 // DialEx is the extended WebSocket dial function
 func (cf *WSConnectionsFactory) DialEx(
-	ctx context.Context, address, path, userAgent, wsProtocol string,
+	ctx context.Context, u url.URL, userAgent, wsProtocol string,
 ) (*websocket.Conn, error) {
-	URL := &url.URL{
-		Scheme: cf.Scheme,
-		Host:   address,
-		Path:   path,
-		// Allow injecting access token queries. If the variable is empty
-		// then this is a no-op.
-		RawQuery: os.Getenv("NDT5_ACCESS_TOKEN"),
-	}
 	headers := http.Header{}
 	headers.Add("Sec-WebSocket-Protocol", wsProtocol)
 	headers.Add("User-Agent", userAgent)
-	conn, _, err := cf.Dialer.DialContext(ctx, URL.String(), headers)
+	conn, _, err := cf.Dialer.DialContext(ctx, u.String(), headers)
 	return conn, err
 }
 
