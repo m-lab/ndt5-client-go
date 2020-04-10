@@ -42,6 +42,7 @@ var (
 	flagQuiet      = flag.Bool("quiet", false, "emit summary and errors only")
 	flagExitOnErr  = flag.Int("exit-on-error", 0, "Exit code to use for errors")
 	flagExitOnWarn = flag.Int("exit-on-warning", 0, "Exit code to use when for warnings")
+	flagService    = flagx.URL{}
 )
 
 func init() {
@@ -55,10 +56,17 @@ func init() {
 		"format",
 		`Output format: "human" or "json"`,
 	)
+	flag.Var(
+		&flagService,
+		"service-url",
+		"Service URL specifies target hostname and other URL fields like access token. Overrides -hostname.",
+	)
 }
 
 func main() {
 	flag.Parse()
+	flagx.ArgsFromEnvWithLog(flag.CommandLine, false)
+
 	var dialer ndt5.NetDialer = new(net.Dialer)
 	if *flagThrottle > 0 {
 		dialer = trafficshaping.NewDialerWithBitrate(*flagThrottle)
@@ -68,7 +76,10 @@ func main() {
 	case "ndt5":
 		factory5.ConnectionsFactory = ndt5.NewRawConnectionsFactory(dialer)
 	case "ndt5+wss":
-		factory5.ConnectionsFactory = ndt5.NewWSConnectionsFactory(dialer)
+		if flagService.URL != nil {
+			*flagHostname = flagService.Hostname()
+		}
+		factory5.ConnectionsFactory = ndt5.NewWSConnectionsFactory(dialer, flagService.URL)
 	}
 	if *flagVerbose {
 		factory5.ObserverFactory = new(verboseFrameReadWriteObserverFactory)

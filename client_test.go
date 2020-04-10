@@ -39,6 +39,7 @@ func TestIntegrationClientWSS(t *testing.T) {
 	protocolFactory := ndt5.NewProtocolFactory5()
 	protocolFactory.ConnectionsFactory = ndt5.NewWSConnectionsFactory(
 		trafficshaping.NewDialer(),
+		nil,
 	)
 	client := ndt5.NewClient(clientName, clientVersion, "https://mlab-sandbox.appspot.com")
 	client.ProtocolFactory = protocolFactory
