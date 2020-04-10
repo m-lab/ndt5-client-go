@@ -79,7 +79,7 @@ func (cf *WSConnectionsFactory) DialMeasurementConn(
 
 // DialEx is the extended WebSocket dial function
 func (cf *WSConnectionsFactory) DialEx(
-	ctx context.Context, u url.URL, userAgent, wsProtocol string,
+	ctx context.Context, u url.URL, wsProtocol, userAgent string,
 ) (*websocket.Conn, error) {
 	headers := http.Header{}
 	headers.Add("Sec-WebSocket-Protocol", wsProtocol)
