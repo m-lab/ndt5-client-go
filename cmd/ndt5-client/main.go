@@ -38,11 +38,11 @@ var (
 	flagThrottle = flag.Int64("throttle", 0, "Throttle connections to given rate for testing (bits/sec)")
 	flagTimeout  = flag.Duration(
 		"timeout", defaultTimeout, "time after which the test is aborted")
-	flagVerbose     = flag.Bool("verbose", false, "Log ndt5 messages")
-	flagQuiet       = flag.Bool("quiet", false, "emit summary and errors only")
-	flagExitOnErr   = flag.Int("exit-on-error", 0, "Exit code to use for errors")
-	flagExitOnWarn  = flag.Int("exit-on-warning", 0, "Exit code to use when for warnings")
-	flagOverrideURL = flagx.URL{}
+	flagVerbose    = flag.Bool("verbose", false, "Log ndt5 messages")
+	flagQuiet      = flag.Bool("quiet", false, "emit summary and errors only")
+	flagExitOnErr  = flag.Int("exit-on-error", 0, "Exit code to use for errors")
+	flagExitOnWarn = flag.Int("exit-on-warning", 0, "Exit code to use when for warnings")
+	flagService    = flagx.URL{}
 )
 
 func init() {
@@ -57,9 +57,9 @@ func init() {
 		`Output format: "human" or "json"`,
 	)
 	flag.Var(
-		&flagOverrideURL,
-		"override-url",
-		"Override URL specifies target hostname and other URL fields like access token. Overrides -hostname.",
+		&flagService,
+		"service-url",
+		"Service URL specifies target hostname and other URL fields like access token. Overrides -hostname.",
 	)
 }
 
@@ -76,10 +76,10 @@ func main() {
 	case "ndt5":
 		factory5.ConnectionsFactory = ndt5.NewRawConnectionsFactory(dialer)
 	case "ndt5+wss":
-		if flagOverrideURL.URL != nil {
-			*flagHostname = flagOverrideURL.Hostname()
+		if flagService.URL != nil {
+			*flagHostname = flagService.Hostname()
 		}
-		factory5.ConnectionsFactory = ndt5.NewWSConnectionsFactory(dialer, flagOverrideURL.URL)
+		factory5.ConnectionsFactory = ndt5.NewWSConnectionsFactory(dialer, flagService.URL)
 	}
 	if *flagVerbose {
 		factory5.ObserverFactory = new(verboseFrameReadWriteObserverFactory)
