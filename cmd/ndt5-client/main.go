@@ -25,7 +25,7 @@ const (
 )
 
 var (
-	flagHostname = flag.String("hostname", "", "Measurement server hostname")
+	flagServer   = flag.String("server", "", "Measurement server hostname")
 	flagProtocol = flagx.Enum{
 		Options: []string{"ndt5", "ndt5+wss"},
 		Value:   "ndt5",
@@ -77,7 +77,7 @@ func main() {
 		factory5.ConnectionsFactory = ndt5.NewRawConnectionsFactory(dialer)
 	case "ndt5+wss":
 		if flagService.URL != nil {
-			*flagHostname = flagService.Hostname()
+			*flagServer = flagService.Hostname()
 		}
 		factory5.ConnectionsFactory = ndt5.NewWSConnectionsFactory(dialer, flagService.URL)
 	}
@@ -86,7 +86,7 @@ func main() {
 	}
 	client := ndt5.NewClient(clientName, clientVersion, *flagNSURL)
 	client.ProtocolFactory = factory5
-	client.FQDN = *flagHostname
+	client.FQDN = *flagServer
 
 	var e emitter.Emitter
 	if flagFormat.Value == "json" {
