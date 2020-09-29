@@ -61,7 +61,7 @@ func (r *httpTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 const (
-	toolName  = "ndt5"
+	toolName  = "ndt_ssl"
 	userAgent = "ndt5-client-go/0.1.0"
 )
 
