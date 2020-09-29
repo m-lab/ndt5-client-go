@@ -61,8 +61,8 @@ func (r *httpTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 const (
-	toolName  = "ndt7"
-	userAgent = "ndt7-client-go/0.1.0"
+	toolName  = "ndt5"
+	userAgent = "ndt5-client-go/0.1.0"
 )
 
 func TestQueryCommonCase(t *testing.T) {

@@ -88,15 +88,8 @@ github.com/kr/pretty v0.2.0/go.mod h1:ipq/a2n7PKx3OHsz4KJII5eveXtPO4qwEXGdVfWzfn
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0 h1:45sCR5RtlFHMR4UwH9sdQ5TC8v0qDQCHnXt+kaKSTVE=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
-github.com/m-lab/go v1.2.0/go.mod h1:FcVx/N8dL5J5TVQ2L0d8/cAw/ljR6fhwZqvqZHrb5/Q=
 github.com/m-lab/go v1.4.0 h1:Au2Vt15+H8oOd3xYZFfW3gK86GRciKlfGJs/FzsJwK4=
 github.com/m-lab/go v1.4.0/go.mod h1:f22d1CtoFIho8yt0wPNYo0Lx5h8YfgRW4+1pzQTeQRw=
-github.com/m-lab/ndt-server v0.13.4 h1:0rjWbZsor6/CRxOMlWxWEq1I7GUWrNCTM6//OFNC3Yo=
-github.com/m-lab/ndt-server v0.13.4/go.mod h1:ZLVRCEbCBkhh0pwNjnLpwaZnHOHGEH76H/fzIIVFRWw=
-github.com/m-lab/ndt7-client-go v0.2.0 h1:I+BV/F9/52wh2czIFULsJjyd4N7kKjwGFMpvCykLNaY=
-github.com/m-lab/ndt7-client-go v0.2.0/go.mod h1:dPCMzEUyVKj/RT8+42LXOFvvioHxcNsesRAFkaq3NjY=
-github.com/m-lab/tcp-info v1.3.0 h1:bL8ElOp5Sxc5e1W86swMv5zjh6/y1Y9qT7eEOgJnzq4=
-github.com/m-lab/tcp-info v1.3.0/go.mod h1:bkvI4qbjB6QVC2tsLSHqf5OnIYcmuLEVjo7+8YA56Kg=
 github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
 github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
 github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
