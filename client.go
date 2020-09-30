@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/m-lab/ndt7-client-go/mlabns"
+	"github.com/m-lab/ndt5-client-go/mlabns"
 )
 
 // NetDialer is a network dialer.
