@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/hex"
-	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -130,7 +129,6 @@ func main() {
 
 	summary := makeSummary(client.FQDN, client.Result)
 	err = e.OnSummary(summary)
-	err = errors.New("test")
 	rtx.Must(err, "emitter.OnSummary failed")
 	os.Exit(exitCode)
 }
