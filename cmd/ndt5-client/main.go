@@ -179,6 +179,11 @@ func makeSummary(FQDN string, result ndt5.TestResult) *emitter.Summary {
 			retrans, err1 := strconv.ParseFloat(bytesRetrans, 64)
 			sent, err2 := strconv.ParseFloat(bytesSent, 64)
 
+			// If BytesRetrans and BytesSent aren't both > 0, something went
+			// wrong while getting the TCPInfo results. While this should never
+			// happen on the M-Lab servers, it's been reported in some custom
+			// deployments. In this case, we don't add the retransmission to
+			// the summary.
 			if err1 == nil && err2 == nil && retrans > 0 && sent > 0 {
 				s.DownloadRetrans = emitter.ValueUnitPair{
 					Value: retrans / sent * 100,
