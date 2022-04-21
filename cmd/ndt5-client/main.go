@@ -184,7 +184,7 @@ func makeSummary(FQDN string, result ndt5.TestResult) *emitter.Summary {
 			// happen on the M-Lab servers, it's been reported in some custom
 			// deployments. In this case, we don't add the retransmission to
 			// the summary.
-			if err1 == nil && err2 == nil && retrans > 0 && sent > 0 {
+			if err1 == nil && err2 == nil && sent > 0 {
 				s.DownloadRetrans = emitter.ValueUnitPair{
 					Value: retrans / sent * 100,
 					Unit:  "%",
