@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -128,7 +129,9 @@ func main() {
 	}
 
 	summary := makeSummary(client.FQDN, client.Result)
-	e.OnSummary(summary)
+	err = e.OnSummary(summary)
+	err = errors.New("test")
+	rtx.Must(err, "emitter.OnSummary failed")
 	os.Exit(exitCode)
 }
 
@@ -178,7 +181,7 @@ func makeSummary(FQDN string, result ndt5.TestResult) *emitter.Summary {
 			retrans, err1 := strconv.ParseFloat(bytesRetrans, 64)
 			sent, err2 := strconv.ParseFloat(bytesSent, 64)
 
-			if err1 == nil && err2 == nil {
+			if err1 == nil && err2 == nil && retrans > 0 && sent > 0 {
 				s.DownloadRetrans = emitter.ValueUnitPair{
 					Value: retrans / sent * 100,
 					Unit:  "%",
