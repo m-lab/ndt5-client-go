@@ -8,4 +8,4 @@ require (
 	github.com/m-lab/go v0.1.43
 )
 
-require github.com/araddon/dateparse v0.0.0-20190622164848-0fb0a474d195 // indirect
+require github.com/araddon/dateparse v0.0.0-20200409225146-d820a6159ab1 // indirect
