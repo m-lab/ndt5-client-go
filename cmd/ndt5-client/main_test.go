@@ -9,6 +9,12 @@ func TestIntegrationMainRaw(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
+	origExit = osExit
+	osExit = func(int) {}
+	defer func() {
+		osExit = origExit
+	}()
+
 	origValue := flagProtocol.Value
 	flagProtocol.Value = "ndt5"
 	defer func() {
@@ -21,6 +27,12 @@ func TestIntegrationMainWSS(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
+	origExit = osExit
+	osExit = func(int) {}
+	defer func() {
+		osExit = origExit
+	}()
+
 	origValue := flagProtocol.Value
 	flagProtocol.Value = "ndt5+wss"
 	defer func() {

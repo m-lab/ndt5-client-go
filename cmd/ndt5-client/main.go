@@ -43,6 +43,8 @@ var (
 	flagExitOnErr  = flag.Int("exit-on-error", 0, "Exit code to use for errors")
 	flagExitOnWarn = flag.Int("exit-on-warning", 0, "Exit code to use when for warnings")
 	flagService    = flagx.URL{}
+
+	osExit = os.Exit // Allow mocking os.Exit for unit tests.
 )
 
 func init() {
@@ -130,7 +132,7 @@ func main() {
 	summary := makeSummary(client.FQDN, client.Result)
 	err = e.OnSummary(summary)
 	rtx.Must(err, "emitter.OnSummary failed")
-	os.Exit(exitCode)
+	osExit(exitCode)
 }
 
 func makeSummary(FQDN string, result ndt5.TestResult) *emitter.Summary {
