@@ -9,7 +9,7 @@ func TestIntegrationMainRaw(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	origExit = osExit
+	origExit := osExit
 	osExit = func(int) {}
 	defer func() {
 		osExit = origExit
@@ -27,7 +27,7 @@ func TestIntegrationMainWSS(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	origExit = osExit
+	origExit := osExit
 	osExit = func(int) {}
 	defer func() {
 		osExit = origExit
