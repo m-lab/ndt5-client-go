@@ -1,6 +1,6 @@
 module github.com/m-lab/ndt5-client-go
 
-go 1.18
+go 1.20
 
 require (
 	github.com/google/martian/v3 v3.1.0
